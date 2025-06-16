@@ -191,7 +191,7 @@ async function handleUserInput(userMessage, From) {
           `The task *${session.task}* assigned to *${session.assignee}* was completed. ✅`
         );
 
-        cronJobs.get(taskId)?.cron?.stop()
+        cronJobs.get(taskId)?.cron?.stop();
         cronJobs.delete(taskId);
       }
 
@@ -476,22 +476,19 @@ Thank you for providing the task details! Here's a quick summary:
                 delete userSessions[From];
                 session.conversationHistory = [];
 
-                await fetch(
-                  "http://localhost:8000/update-reminder",
-                  {
-                    method: "POST",
-                    headers: {
-                      "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                      reminder_frequency: taskData.reminder_frequency,
-                      taskId: newTask.taskId,
-                      reminder_type: taskData.reminder_type || "recurring",
-                      dueDateTime: dueDateTime, // Pass due date for one-time reminders
-                      reminderDateTime: taskData.reminderDateTime,
-                    }),
-                  }
-                )
+                await fetch("http://localhost:8000/update-reminder", {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    reminder_frequency: taskData.reminder_frequency,
+                    taskId: newTask.taskId,
+                    reminder_type: taskData.reminder_type || "recurring",
+                    dueDateTime: dueDateTime, // Pass due date for one-time reminders
+                    reminderDateTime: taskData.reminderDateTime,
+                  }),
+                })
                   .then((res) => res.json())
                   .then((response) => {
                     console.log("taskID for reminder--->", newTask.taskId);
@@ -1451,16 +1448,14 @@ app.post("/update-reminder", async (req, res) => {
     );
 
     if (!matchedRow) {
-  console.log(
-    `No matching task found for task ${taskId}. Stopping reminder.`
-  );
-  const cronJob = cronJobs.get(taskId);
-  if (cronJob && typeof cronJob.stop === "function") {
-    cronJob.stop();
-  }
-  cronJobs.delete(taskId);
-  return;
-}
+      console.log(`No matching task found for task ${taskId}. Stopping reminder.`);
+      const job = cronJobs.get(taskId);
+      if (job?.timeoutId) {
+        clearTimeout(job.timeoutId);
+      }
+      cronJobs.delete(taskId);
+      return;
+    }
 
     const matchedTask = matchedRow.tasks.find((task) => task.taskId === taskId);
 
@@ -1476,7 +1471,10 @@ app.post("/update-reminder", async (req, res) => {
       console.log(
         `Task ${taskId} doesn't need reminder anymore. Stopping reminder.`
       );
-      cronJobs.get(taskId)?.stop();
+     const job = cronJobs.get(taskId);
+      if (job?.timeoutId) {
+        clearTimeout(job.timeoutId);
+      }
       cronJobs.delete(taskId);
       return;
     }
@@ -1571,53 +1569,147 @@ app.post("/update-reminder", async (req, res) => {
     const quantity = parseInt(match[1], 10);
     let unit = match[2];
 
-     if (quantity <= 0) {
+    if (quantity <= 0) {
       console.log("Invalid reminder frequency quantity:", quantity);
-      return res.status(400).json({ message: "Reminder frequency quantity must be positive" });
+      return res
+        .status(400)
+        .json({ message: "Reminder frequency quantity must be positive" });
     }
 
-      if (unit === "minute" || unit === "min" || unit === "mins" || unit === "minutes") {
+    if (
+      unit === "minute" ||
+      unit === "min" ||
+      unit === "mins" ||
+      unit === "minutes"
+    ) {
       unit = "minutes";
-    } else if (unit === "hour" || unit === "hr" || unit === "hrs" || unit === "hours") {
+    } else if (
+      unit === "hour" ||
+      unit === "hr" ||
+      unit === "hrs" ||
+      unit === "hours"
+    ) {
       unit = "hours";
     } else if (unit === "day" || unit === "days") {
       unit = "days";
     }
 
-        console.log('quantity===>', quantity,'unit===>', unit);
+    console.log("quantity===>", quantity, "unit===>", unit);
 
     // Calculate the first reminder time (5 hours from now)
     const now = moment().tz("Asia/Kolkata");
     const firstReminderTime = now.clone().add(quantity, unit);
     const delay = firstReminderTime.diff(now);
 
-            console.log(`Now: ${now.format("YYYY-MM-DD HH:mm:ss")} IST`);
-console.log(`First reminder time: ${firstReminderTime.format("YYYY-MM-DD HH:mm:ss")} IST`);
-console.log(`Delay: ${delay} ms`);
+    console.log(`Now: ${now.format("YYYY-MM-DD HH:mm:ss")} IST`);
+    console.log(
+      `First reminder time: ${firstReminderTime.format(
+        "YYYY-MM-DD HH:mm:ss"
+      )} IST`
+    );
+    console.log(`Delay: ${delay} ms`);
 
-     if (delay <= 0) {
-      console.error(`Invalid delay for task ${taskId}: ${delay} ms. Skipping reminder.`);
-      return res.status(400).json({ message: "Invalid reminder time: must be in the future" });
+    if (delay <= 0) {
+      console.error(
+        `Invalid delay for task ${taskId}: ${delay} ms. Skipping reminder.`
+      );
+      return res
+        .status(400)
+        .json({ message: "Invalid reminder time: must be in the future" });
     }
 
-      let cronExpression = "";
+    let cronExpression = "";
     if (unit === "minutes") {
-     const startMinute = firstReminderTime.minute();
-      console.log('startMinute:', startMinute);
-      
-      const minutes = [];
-      let currentMinute = startMinute;
-      // Generate 12 minutes to cover transitions across hour boundaries
-      for (let i = 0; i < 12; i++) {
-        minutes.push(currentMinute % 60);
-        currentMinute += quantity;
-      }
-      
-      console.log('Generated minutes:', minutes);
-      cronExpression = `${minutes.join(",")} * * * *`;
+      const scheduleReminder = async () => {
+        await sendReminder();
+        const nextReminderTime = moment()
+          .tz("Asia/Kolkata")
+          .add(quantity, "minutes");
+        console.log(
+          `Scheduling next reminder for task ${taskId} at ${nextReminderTime.format(
+            "YYYY-MM-DD HH:mm:ss"
+          )} IST`
+        );
+        // Persist next reminder time
+        await supabase.from("reminders").upsert({
+          taskId,
+          reminder_frequency,
+          nextReminderTime: nextReminderTime.format("YYYY-MM-DD HH:mm:ss"),
+        });
+        const nextDelay = nextReminderTime.diff(moment().tz("Asia/Kolkata"));
+        const timeoutId = setTimeout(scheduleReminder, nextDelay);
+        cronJobs.set(taskId, {
+          timeoutId,
+          frequency: reminder_frequency,
+          type: "recurring",
+        });
+      };
+
+      setTimeout(async () => {
+        await scheduleReminder();
+      }, delay);
+
+      cronJobs.set(taskId, {
+        type: "recurring",
+        frequency: reminder_frequency,
+      });
+      console.log(
+        `Scheduled first reminder for task ${taskId} at ${firstReminderTime.format(
+          "YYYY-MM-DD HH:mm:ss"
+        )} IST with frequency ${reminder_frequency}`
+      );
+      // Persist initial reminder
+      await supabase.from("reminders").upsert({
+        taskId,
+        reminder_frequency,
+        nextReminderTime: firstReminderTime.format("YYYY-MM-DD HH:mm:ss"),
+      });
+      return res.status(200).json({ message: "Recurring reminder scheduled" });
     } else if (unit === "hours") {
-      const minute = firstReminderTime.minute();
-      cronExpression = `${minute} */${quantity} * * *`;
+      const scheduleReminder = async () => {
+        await sendReminder();
+        const nextReminderTime = moment()
+          .tz("Asia/Kolkata")
+          .add(quantity, "hours");
+        console.log(
+          `Scheduling next reminder for task ${taskId} at ${nextReminderTime.format(
+            "YYYY-MM-DD HH:mm:ss"
+          )} IST`
+        );
+        await supabase.from("reminders").upsert({
+          taskId,
+          reminder_frequency,
+          nextReminderTime: nextReminderTime.format("YYYY-MM-DD HH:mm:ss"),
+        });
+        const nextDelay = nextReminderTime.diff(moment().tz("Asia/Kolkata"));
+        const timeoutId = setTimeout(scheduleReminder, nextDelay);
+        cronJobs.set(taskId, {
+          timeoutId,
+          frequency: reminder_frequency,
+          type: "recurring",
+        });
+      };
+
+      const timeoutId = setTimeout(async () => {
+        await scheduleReminder();
+      }, delay);
+
+      cronJobs.set(taskId, {
+        type: "recurring",
+        frequency: reminder_frequency,
+        timeoutId,
+      });
+      console.log(
+        `Scheduled first reminder for task ${taskId} at ${firstReminderTime.format(
+          "YYYY-MM-DD HH:mm:ss"
+        )} IST with frequency ${reminder_frequency}`
+      );
+      await supabase.from("reminders").upsert({
+        taskId,
+        reminder_frequency,
+        nextReminderTime: firstReminderTime.format("YYYY-MM-DD HH:mm:ss"),
+      });
+      return res.status(200).json({ message: "Recurring reminder scheduled" });
     } else if (unit === "days") {
       const minute = firstReminderTime.minute();
       const hour = firstReminderTime.hour();
@@ -1627,7 +1719,7 @@ console.log(`Delay: ${delay} ms`);
       return res.status(400).json({ message: "Unsupported frequency unit" });
     }
 
-        console.log(`Cron expression for task==> 1 ${taskId}: ${cronExpression}`);
+    console.log(`Cron expression for task==> 1 ${taskId}: ${cronExpression}`);
 
     setTimeout(async () => {
       await sendReminder();

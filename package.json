@@ -1,0 +1,38 @@
+{
+  "name": "reminder-test-new",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/astik0398/reminder-test-new.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/astik0398/reminder-test-new/issues"
+  },
+  "homepage": "https://github.com/astik0398/reminder-test-new#readme",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.50.0",
+    "axios": "^1.10.0",
+    "body-parser": "^1.20.3",
+    "chrono-node": "^2.8.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "express": "^4.21.2",
+    "form-data": "^4.0.3",
+    "googleapis": "^148.0.0",
+    "moment-timezone": "^0.5.48",
+    "node-cron": "^3.0.3",
+    "node-schedule": "^2.1.1",
+    "openai": "^4.104.0",
+    "retry-axios": "^3.1.3",
+    "tinyurl": "^1.1.7",
+    "twilio": "^5.7.1"
+  }
+}
