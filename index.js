@@ -145,8 +145,8 @@ async function handleUserInput(userMessage, From) {
       const taskId = session.taskId; // Now using taskId instead of task name
       const assignee = session.assignee;
 
-      console.log("INSIDE SESSION.SETP 5, USER TYPES YES", session);
-      console.log("FROM====>", From);
+      // console.log("INSIDE SESSION.SETP 5, USER TYPES YES", session);
+      // console.log("FROM====>", From);
 
       const { data, error } = await supabase
         .from("grouped_tasks")
@@ -165,7 +165,7 @@ async function handleUserInput(userMessage, From) {
         task.taskId === taskId ? { ...task, task_done: "Completed" } : task
       );
 
-      console.log("updatedTasks --->", updatedTasks);
+      // console.log("updatedTasks --->", updatedTasks);
 
       const { error: updateError } = await supabase
         .from("grouped_tasks")
@@ -173,7 +173,7 @@ async function handleUserInput(userMessage, From) {
         .eq("name", assignee.toUpperCase())
         .eq("employerNumber", session.fromNumber);
 
-      console.log("assigner Map===> 1", assignerMap);
+      // console.log("assigner Map===> 1", assignerMap);
 
       if (updateError) {
         console.error("Error updating task:", updateError);
@@ -207,14 +207,14 @@ async function handleUserInput(userMessage, From) {
       sendMessage(From, "Please respond with 'Yes' or 'No'.");
     }
   } else if (session.step === 6) {
-    console.log("session --- >", session);
+    // console.log("session --- >", session);
 
     const reason = userMessage.trim();
     const task = session.task;
     const assignee = session.assignee;
     const taskId = session.taskId;
 
-    console.log("assignee----session====>", assignee);
+    // console.log("assignee----session====>", assignee);
 
     const { data, error } = await supabase
       .from("grouped_tasks")
@@ -235,7 +235,7 @@ async function handleUserInput(userMessage, From) {
         : task
     );
 
-    console.log("updatedTasks --->", updatedTasks);
+    // console.log("updatedTasks --->", updatedTasks);
 
     const { error: updateError } = await supabase
       .from("grouped_tasks")
@@ -243,7 +243,7 @@ async function handleUserInput(userMessage, From) {
       .eq("name", assignee.toUpperCase())
       .eq("employerNumber", session.fromNumber);
 
-    console.log("assigner Map===> 2", assignerMap);
+    // console.log("assigner Map===> 2", assignerMap);
 
     if (updateError) {
       console.error("Error updating task with reason:", updateError);
@@ -329,23 +329,23 @@ convert it into the 24-hour format:
 Conversation history: ${JSON.stringify(conversationHistory)}
 User input: ${userMessage}
 `;
-    console.log("we are here===> 3");
+    // console.log("we are here===> 3");
     try {
       const response = await openai.chat.completions.create({
         model: "gpt-4-turbo",
         messages: [{ role: "system", content: prompt }],
       });
-      console.log("we are here===> 4");
+      // console.log("we are here===> 4");
       const botReply = response.choices[0].message.content;
       session.conversationHistory = conversationHistory;
-      console.log("we are here===> 5", botReply);
+      // console.log("we are here===> 5", botReply);
 
       if (botReply[0] === "{") {
         const taskDetails = JSON.parse(botReply);
 
         const assigneeName = taskDetails.assignee.trim();
 
-        console.log("assigneeName====>", assigneeName);
+        // console.log("assigneeName====>", assigneeName);
 
         const { data: matchingAssignees, error } = await supabase
           .from("grouped_tasks")
@@ -364,7 +364,7 @@ User input: ${userMessage}
 
         console.log("FROM NUMBER===>", From);
 
-        console.log("matchingAssignees====>", matchingAssignees);
+        // console.log("matchingAssignees====>", matchingAssignees);
 
         if (matchingAssignees.length > 1) {
           let message = `There are multiple people with the name "${assigneeName}". Please choose one:\n`;
@@ -406,8 +406,8 @@ Thank you for providing the task details! Here's a quick summary:
               person.name.toLowerCase() === taskData.assignee.toLowerCase() &&
               person.employerNumber === From
           );
-          console.log("assignedPerson--->", assignedPerson);
-          console.log("taskData", taskData);
+          // console.log("assignedPerson--->", assignedPerson);
+          // console.log("taskData", taskData);
 
           if (assignedPerson) {
             let dueDateTime = `${taskData.dueDate} ${taskData.dueTime}`;
@@ -491,9 +491,9 @@ Thank you for providing the task details! Here's a quick summary:
                 })
                   .then((res) => res.json())
                   .then((response) => {
-                    console.log("taskID for reminder--->", newTask.taskId);
+                    // console.log("taskID for reminder--->", newTask.taskId);
 
-                    console.log("Reminder endpoint response:", response);
+                    // console.log("Reminder endpoint response:", response);
                   })
                   .catch((error) => {
                     console.error("Error triggering reminder endpoint:", error);
@@ -1506,13 +1506,13 @@ app.post("/update-reminder", async (req, res) => {
         .eq("employerNumber", matchedRow.employerNumber)
         .single();
 
-      console.log("inside ONE-TIME reminder existing data==>", existingData);
+      // console.log("inside ONE-TIME reminder existing data==>", existingData);
 
       const updatedTasks = existingData.tasks.map((task) =>
         task.taskId === taskId ? { ...task, reminder: "false" } : task
       );
 
-      console.log("inside ONE-TIME reminder", updatedTasks);
+      // console.log("inside ONE-TIME reminder", updatedTasks);
       console.log("inside ONE-TIME reminder===>", matchedRow.employerNumber);
 
       await supabase
