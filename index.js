@@ -467,11 +467,16 @@ Thank you for providing the task details! Here's a quick summary:
                     taskData.task
                   }* has been assigned to *${taskData.assignee.toUpperCase()}*\n🗓️ *Due Date:* ${dueDateTime}`
                 );
-                sendMessage(
+                   sendMessage(
                   `whatsapp:+${assignedPerson.phone}`,
-                  `📬 *New Task Assigned!*\n\nHello *${taskData.assignee.toUpperCase()}*,\nYou've been assigned a new task:\n\n📝 *Task:* *${
-                    taskData.task
-                  }*\n📅 *Deadline:* ${dueDateTime}`
+                  null, // No body for template
+                  true, // isTemplate flag
+                  {
+                    "1": taskData.assignee.toUpperCase(),
+                    "2": taskData.task,
+                    "3": dueDateTime
+                  },
+                  process.env.TWILIO_TASK_TEMPLATE_SID
                 );
                 delete userSessions[From];
                 session.conversationHistory = [];
@@ -517,24 +522,35 @@ Thank you for providing the task details! Here's a quick summary:
   }
 }
 
-function sendMessage(to, message) {
+async function sendMessage(to, message, isTemplate = false, templateData = {}, template_id) {
   console.log("Sending message to:", to);
   console.log("Message:", message);
-  client.messages
-    .create({
+
+  console.log('isTemplate-->',isTemplate, 'templateData-->', templateData);
+  
+  try {
+    const messageOptions = {
       from: process.env.TWILIO_PHONE_NUMBER,
       to,
-      body: message,
-    })
-    .then((message) => {
-      console.log("Message sent successfully:", message.sid);
-    })
-    .catch((err) => {
-      console.error("Error sending message:", err);
-      if (err.code) {
-        console.error("Twilio error code:", err.code);
-      }
-    });
+    };
+
+    if (isTemplate) {
+      messageOptions.contentSid = template_id; // Template SID from .env
+      messageOptions.contentVariables = JSON.stringify(templateData);
+    } else {
+      messageOptions.body = message;
+    }
+
+    const sentMessage = await client.messages.create(messageOptions);
+    console.log("Message sent successfully:", sentMessage.sid);
+    return sentMessage;
+  } catch (err) {
+    console.error("Error sending message:", err);
+    if (err.code) {
+      console.error("Twilio error code:", err.code);
+    }
+    throw err;
+  }
 }
 
 async function transcribeAudioDirectly(mediaUrl) {
@@ -1482,10 +1498,15 @@ app.post("/update-reminder", async (req, res) => {
     console.log(`Sending reminder to: ${matchedRow.phone} for task ${taskId}`);
 
     // send TEMPORARY due date and time for one-time reminders
-    sendMessage(
-      `whatsapp:+${matchedRow.phone}`,
-      `⏰ *Reminder*\n\nHas the task *${matchedTask.task_details}* assigned to you been completed yet?\n✉️ Reply with Yes or No.\n📅 *Due:* ${matchedTask.due_date}`
-    );
+
+     sendMessage(
+                  `whatsapp:+${matchedRow.phone}`,
+                  null, // No body for template
+                  true, // isTemplate flag
+                  { "1": matchedTask.task_details,
+                    "2": matchedTask.due_date,},
+                  process.env.TWILIO_REMINDER_TEMPLATE_SID
+                );
 
     userSessions[`whatsapp:+${matchedRow.phone}`] = {
       step: 5,
