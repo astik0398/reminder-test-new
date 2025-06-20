@@ -481,7 +481,7 @@ Thank you for providing the task details! Here's a quick summary:
                 delete userSessions[From];
                 session.conversationHistory = [];
 
-                await fetch("https://reminder-test-new-production.up.railway.app/update-reminder", {
+                await fetch("http://localhost:8000/update-reminder", {
                   method: "POST",
                   headers: {
                     "Content-Type": "application/json",
@@ -788,6 +788,11 @@ async function insertBakeryOrder(data, From) {
 
 async function makeTwilioRequest() {
   app.post("/whatsapp", async (req, res) => {
+
+    const buttonPayload = req.body.ButtonPayload
+
+    console.log('buttonPayload inside whatsapp endpoint---->', buttonPayload);
+    
     const { Body, From } = req.body;
 
     todayDate = getFormattedDate();
@@ -802,6 +807,64 @@ async function makeTwilioRequest() {
     let incomingMsg = Body.trim();
 
     const userNumber = req.body.From;
+
+    if (buttonPayload) {
+    console.log("ButtonPayload received:", buttonPayload);
+
+    // Parse ButtonPayload (format: yes_<taskId> or no_<taskId>)
+    const [response, taskId] = buttonPayload.split("_");
+
+    if (!taskId || !["yes", "no"].includes(response.toLowerCase())) {
+      console.error("Invalid ButtonPayload format:", ButtonPayload);
+      twiml.message("Error: Invalid response. Please use the provided buttons.");
+      res.setHeader("Content-Type", "text/xml");
+      return res.status(200).send(twiml.toString());
+    }
+
+    // Fetch task details from Supabase based on taskId
+    const { data: groupedData, error } = await supabase
+      .from("grouped_tasks")
+      .select("name, phone, tasks, employerNumber");
+
+    if (error) {
+      console.error("Error fetching grouped_tasks:", error);
+      twiml.message("Error: Could not retrieve task details.");
+      res.setHeader("Content-Type", "text/xml");
+      return res.status(200).send(twiml.toString());
+    }
+
+    // Find the row containing the task with the matching taskId
+    const matchedRow = groupedData.find((row) =>
+      row.tasks?.some((task) => task.taskId === taskId)
+    );
+
+    if (!matchedRow) {
+      console.error(`No task found for taskId: ${taskId}`);
+      twiml.message("Error: Task not found.");
+      res.setHeader("Content-Type", "text/xml");
+      return res.status(200).send(twiml.toString());
+    }
+
+    // Get the specific task
+    const matchedTask = matchedRow.tasks.find((task) => task.taskId === taskId);
+
+    // Initialize user session with task details
+    userSessions[From] = {
+      step: 5, // Set to step 5 for handling Yes/No responses
+      task: matchedTask.task_details,
+      assignee: matchedRow.name,
+      fromNumber: matchedRow.employerNumber,
+      taskId: taskId,
+      conversationHistory: [],
+    };
+
+    // Pass the button response to handleUserInput
+    await handleUserInput(response.toLowerCase(), From);
+
+    // Respond to Twilio
+    res.setHeader("Content-Type", "text/xml");
+    return res.status(200)
+  }
 
     if (numMedia > 0 && mediaUrl && mediaType?.startsWith("image/")) {
       const twiml = new MessagingResponse();
@@ -1504,7 +1567,8 @@ app.post("/update-reminder", async (req, res) => {
                   null, // No body for template
                   true, // isTemplate flag
                   { "1": matchedTask.task_details,
-                    "2": matchedTask.due_date,},
+                    "2": matchedTask.due_date,
+                  "3": taskId},
                   process.env.TWILIO_REMINDER_TEMPLATE_SID
                 );
 
