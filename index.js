@@ -1503,6 +1503,275 @@ app.get("/auth/google/callback", async (req, res) => {
   }
 });
 
+// CHANGE: Add initializeReminders function
+async function initializeReminders() {
+  console.log("Initializing reminders from database...");
+  try {
+    // Fetch all reminders from the reminders table
+    const { data: reminders, error } = await supabase
+      .from("reminders")
+      .select("taskId, reminder_frequency, nextReminderTime");
+
+    if (error) {
+      console.error("Error fetching reminders:", error);
+      return;
+    }
+
+    if (!reminders || reminders.length === 0) {
+      console.log("No reminders found in database.");
+      return;
+    }
+
+    console.log(`Found ${reminders.length} reminders to initialize.`);
+
+    for (const reminder of reminders) {
+      const { taskId, reminder_frequency, nextReminderTime } = reminder;
+
+      // Skip if already scheduled
+      if (cronJobs.has(taskId)) {
+        console.log(`Reminder for task ${taskId} already scheduled, skipping.`);
+        continue;
+      }
+
+      // Fetch task details to determine reminder_type
+      const { data: groupedData, error: taskError } = await supabase
+        .from("grouped_tasks")
+        .select("name, phone, tasks, employerNumber");
+
+      if (taskError) {
+        console.error(`Error fetching task for ${taskId}:`, taskError);
+        continue;
+      }
+
+      const matchedRow = groupedData.find((row) =>
+        row.tasks?.some((task) => task.taskId === taskId)
+      );
+
+      if (!matchedRow) {
+        console.log(`No task found for taskId ${taskId}, skipping reminder.`);
+        continue;
+      }
+
+      const matchedTask = matchedRow.tasks.find((task) => task.taskId === taskId);
+
+      if (
+        matchedTask.reminder !== "true" ||
+        matchedTask.task_done === "Completed" ||
+        matchedTask.task_done === "No" ||
+        matchedTask.task_done === "Reminder sent"
+      ) {
+        console.log(`Task ${taskId} does not need reminders, skipping.`);
+        continue;
+      }
+
+      // Determine reminder_type (default to recurring if not specified)
+      const reminder_type = matchedTask.reminder_type || "recurring";
+      const reminderDateTime =
+        reminder_type === "one-time" ? matchedTask.reminderDateTime : null;
+
+      // Reuse sendReminder from /update-reminder
+      const sendReminder = async () => {
+        const currentTime = moment().tz("Asia/Kolkata");
+        console.log(
+          `Sending reminder for task ${taskId} at ${currentTime.format(
+            "YYYY-MM-DD HH:mm:ss"
+          )} IST`
+        );
+
+        if (!matchedRow || !matchedTask) {
+          console.log(`Task ${taskId} no longer valid, stopping reminder.`);
+          cronJobs.delete(taskId);
+          return;
+        }
+
+        console.log(`Sending reminder to: ${matchedRow.phone} for task ${taskId}`);
+
+        await sendMessage(
+          `whatsapp:+${matchedRow.phone}`,
+          null,
+          true,
+          {
+            "1": matchedTask.task_details,
+            "2": matchedTask.due_date,
+            "3": taskId,
+          },
+          process.env.TWILIO_REMINDER_TEMPLATE_SID
+        );
+
+        userSessions[`whatsapp:+${matchedRow.phone}`] = {
+          step: 5,
+          task: matchedTask.task_details,
+          assignee: matchedRow.name,
+          fromNumber: matchedRow.employerNumber,
+          taskId: taskId,
+        };
+
+        // For one-time reminders, mark task to stop further reminders
+        if (reminder_type === "one-time") {
+          const { data: existingData } = await supabase
+            .from("grouped_tasks")
+            .select("tasks")
+            .eq("name", matchedRow.name.toUpperCase())
+            .eq("employerNumber", matchedRow.employerNumber)
+            .single();
+
+          const updatedTasks = existingData.tasks.map((task) =>
+            task.taskId === taskId ? { ...task, reminder: "false" } : task
+          );
+
+          await supabase
+            .from("grouped_tasks")
+            .update({ tasks: updatedTasks })
+            .eq("name", matchedRow.name.toUpperCase())
+            .eq("employerNumber", matchedRow.employerNumber);
+
+          cronJobs.delete(taskId);
+        }
+      };
+
+      if (reminder_type === "one-time" && reminderDateTime) {
+        const now = moment().tz("Asia/Kolkata");
+        const reminderTime = moment.tz(
+          reminderDateTime,
+          "YYYY-MM-DD HH:mm",
+          "Asia/Kolkata"
+        );
+        const delay = reminderTime.diff(now);
+
+        if (delay <= 0) {
+          console.log(`One-time reminder for task ${taskId} is in the past, sending now.`);
+          await sendReminder();
+          continue;
+        }
+
+        const timeoutId = setTimeout(async () => {
+          await sendReminder();
+        }, delay);
+
+        cronJobs.set(taskId, { type: "one-time", timeoutId });
+        console.log(
+          `Scheduled one-time reminder for task ${taskId} at ${reminderTime.format(
+            "YYYY-MM-DD HH:mm:ss"
+          )} IST`
+        );
+      } else {
+        // Handle recurring reminders
+        const frequencyPattern =
+          /(\d+)\s*(minute|min|mins|hour|hr|hrs|hours|day|days)s?/;
+        const match = reminder_frequency?.match(frequencyPattern);
+
+        if (!match) {
+          console.log(`Invalid reminder frequency for task ${taskId}: ${reminder_frequency}`);
+          continue;
+        }
+
+        const quantity = parseInt(match[1], 10);
+        let unit = match[2];
+
+        if (
+          unit === "minute" ||
+          unit === "min" ||
+          unit === "mins" ||
+          unit === "minutes"
+        ) {
+          unit = "minutes";
+        } else if (
+          unit === "hour" ||
+          unit === "hr" ||
+          unit === "hrs" ||
+          unit === "hours"
+        ) {
+          unit = "hours";
+        } else if (unit === "day" || unit === "days") {
+          unit = "days";
+        }
+
+        const now = moment().tz("Asia/Kolkata");
+        const nextReminder = moment.tz(
+          nextReminderTime,
+          "YYYY-MM-DD HH:mm:ss",
+          "Asia/Kolkata"
+        );
+        const delay = nextReminder.diff(now);
+
+        if (delay <= 0) {
+          console.log(
+            `Next reminder for task ${taskId} is in the past, sending now and scheduling next.`
+          );
+          await sendReminder();
+          continue;
+        }
+
+        if (unit === "minutes" || unit === "hours") {
+          const scheduleReminder = async () => {
+            await sendReminder();
+            const nextReminderTime = moment()
+              .tz("Asia/Kolkata")
+              .add(quantity, unit);
+            console.log(
+              `Scheduling next reminder for task ${taskId} at ${nextReminderTime.format(
+                "YYYY-MM-DD HH:mm:ss"
+              )} IST`
+            );
+            await supabase.from("reminders").upsert({
+              taskId,
+              reminder_frequency,
+              nextReminderTime: nextReminderTime.format("YYYY-MM-DD HH:mm:ss"),
+            });
+            const nextDelay = nextReminderTime.diff(moment().tz("Asia/Kolkata"));
+            const timeoutId = setTimeout(scheduleReminder, nextDelay);
+            cronJobs.set(taskId, {
+              timeoutId,
+              frequency: reminder_frequency,
+              type: "recurring",
+            });
+          };
+
+          const timeoutId = setTimeout(async () => {
+            await scheduleReminder();
+          }, delay);
+
+          cronJobs.set(taskId, {
+            type: "recurring",
+            frequency: reminder_frequency,
+            timeoutId,
+          });
+          console.log(
+            `Scheduled recurring reminder for task ${taskId} at ${nextReminder.format(
+              "YYYY-MM-DD HH:mm:ss"
+            )} IST with frequency ${reminder_frequency}`
+          );
+        } else if (unit === "days") {
+          const minute = nextReminder.minute();
+          const hour = nextReminder.hour();
+          const cronExpression = `${minute} ${hour} */${quantity} * *`;
+
+          setTimeout(async () => {
+            await sendReminder();
+            const cronJob = cron.schedule(cronExpression, sendReminder, {
+              timezone: "Asia/Kolkata",
+            });
+            cronJobs.set(taskId, {
+              cron: cronJob,
+              frequency: reminder_frequency,
+              type: "recurring",
+            });
+            console.log(
+              `Scheduled recurring reminders for task ${taskId} with cron ${cronExpression} starting at ${nextReminder.format(
+                "YYYY-MM-DD HH:mm:ss"
+              )} IST`
+            );
+          }, delay);
+
+          cronJobs.set(taskId, { type: "recurring", frequency: reminder_frequency });
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Error initializing reminders:", error);
+  }
+}
+
 let isCronRunning = false; // Track if the cron job is active
 const cronJobs = new Map(); // Map to store cron jobs for each task
 
