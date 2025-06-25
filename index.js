@@ -1844,6 +1844,7 @@ app.post("/update-reminder", async (req, res) => {
         clearTimeout(job.timeoutId);
       }
       cronJobs.delete(taskId);
+      await supabase.from("reminders").delete().eq("taskId", taskId);
       return;
     }
 
