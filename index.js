@@ -162,7 +162,7 @@ async function handleUserInput(userMessage, From) {
       }
 
       const updatedTasks = data.tasks.map((task) =>
-        task.taskId === taskId ? { ...task, task_done: "Completed" } : task
+        task.taskId === taskId ? { ...task, task_done: "Completed", reminder: "false" } : task
       );
 
       // console.log("updatedTasks --->", updatedTasks);
@@ -191,8 +191,17 @@ async function handleUserInput(userMessage, From) {
           `The task *${session.task}* assigned to *${session.assignee}* was completed. ✅`
         );
 
-        cronJobs.get(taskId)?.cron?.stop();
+         const job = cronJobs.get(taskId);
+        if (job?.timeoutId) {
+          clearTimeout(job.timeoutId);
+        }
+        if (job?.cron) {
+          job.cron.stop();
+        }
         cronJobs.delete(taskId);
+
+        // CHANGE: Remove reminder from reminders table
+        await supabase.from("reminders").delete().eq("taskId", taskId);
       }
 
       delete userSessions[From];
@@ -1844,7 +1853,6 @@ app.post("/update-reminder", async (req, res) => {
         clearTimeout(job.timeoutId);
       }
       cronJobs.delete(taskId);
-      await supabase.from("reminders").delete().eq("taskId", taskId);
       return;
     }
 
