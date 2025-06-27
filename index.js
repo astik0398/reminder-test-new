@@ -161,50 +161,25 @@ async function handleUserInput(userMessage, From) {
         return;
       }
 
-      const updatedTasks = data.tasks.map((task) =>
-        task.taskId === taskId ? { ...task, task_done: "Completed", reminder: "false" } : task
+      const matchedTask = data.tasks.find((task) => task.taskId === taskId);
+
+      await sendMessage(
+        From,
+        null,
+        true,
+        {
+          "1": taskId, // Unique payload for follow-up
+        },
+        process.env.TWILIO_REMINDER_FOLLOWUP_TEMPLATE_SID // Reuse existing template or create a new one
       );
 
       // console.log("updatedTasks --->", updatedTasks);
 
-      const { error: updateError } = await supabase
-        .from("grouped_tasks")
-        .update({ tasks: updatedTasks })
-        .eq("name", assignee.toUpperCase())
-        .eq("employerNumber", session.fromNumber);
-
-      // console.log("assigner Map===> 1", assignerMap);
-
-      if (updateError) {
-        console.error("Error updating task:", updateError);
-        sendMessage(
-          From,
-          "Sorry, there was an error marking the task as completed."
-        );
-      } else {
-        sendMessage(
-          From,
-          "Thank you! The task has been marked as completed! ✅"
-        );
-        sendMessage(
-          session.fromNumber,
-          `The task *${session.task}* assigned to *${session.assignee}* was completed. ✅`
-        );
-
-         const job = cronJobs.get(taskId);
-        if (job?.timeoutId) {
-          clearTimeout(job.timeoutId);
-        }
-        if (job?.cron) {
-          job.cron.stop();
-        }
-        cronJobs.delete(taskId);
-
-        // CHANGE: Remove reminder from reminders table
-        await supabase.from("reminders").delete().eq("taskId", taskId);
+        userSessions[From] = {
+        ...session,
+        step: 7, // New step for follow-up
+        originalReminderTime: matchedTask.due_date.split(" ")[1] || "09:00", // Store original reminder time or default
       }
-
-      delete userSessions[From];
     } else if (userMessage.toLowerCase() === "no") {
       sendMessage(
         From,
@@ -268,7 +243,108 @@ async function handleUserInput(userMessage, From) {
     }
 
     delete userSessions[From];
-  } else {
+  } 
+  else if (session.step === 7) { // NEW: Handle follow-up response
+    const taskId = session.taskId;
+    const assignee = session.assignee;
+
+    const { data, error } = await supabase
+      .from("grouped_tasks")
+      .select("tasks")
+      .eq("name", assignee.toUpperCase())
+      .eq("employerNumber", session.fromNumber)
+      .single();
+
+    if (error) {
+      console.error("Error fetching tasks:", error);
+      sendMessage(From, "Sorry, there was an error accessing the task.");
+      return;
+    }
+
+    const matchedTask = data.tasks.find((task) => task.taskId === taskId);
+
+    console.log('userMessageeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', userMessage);
+    
+    if (userMessage.toLowerCase() === "yes please") {
+      // NEW: Schedule reminder for tomorrow, keep task as Pending
+      const now = moment().tz("Asia/Kolkata");
+      const tomorrow = now.clone().add(1, "days");
+      const reminderTime = moment.tz(
+        `${tomorrow.format("YYYY-MM-DD")} ${session.originalReminderTime}`,
+        "YYYY-MM-DD HH:mm",
+        "Asia/Kolkata"
+      );
+
+      const updatedTasks = data.tasks.map((task) =>
+        task.taskId === taskId
+          ? {
+              ...task,
+              task_done: "Pending",
+              reminder: "true",
+              reminder_type: "one-time",
+              reminderDateTime: reminderTime.format("YYYY-MM-DD HH:mm"),
+            }
+          : task
+      );
+
+      await supabase
+        .from("grouped_tasks")
+        .update({ tasks: updatedTasks })
+        .eq("name", assignee.toUpperCase())
+        .eq("employerNumber", session.fromNumber);
+
+      // NEW: Schedule new reminder
+      const delay = reminderTime.diff(now);
+      if (delay > 0) {
+        const timeoutId = setTimeout(async () => {
+          await sendReminder(taskId, matchedTask, matchedRow);
+        }, delay);
+        cronJobs.set(taskId, { type: "one-time", timeoutId });
+
+        await supabase.from("reminders").upsert({
+          taskId,
+          reminder_frequency: null,
+          nextReminderTime: reminderTime.format("YYYY-MM-DD HH:mm:ss"),
+        });
+
+        sendMessage(From, "Reminder scheduled for tomorrow! 📅");
+      } else {
+        sendMessage(From, "Error: Reminder time is in the past.");
+      }
+
+      delete userSessions[From];
+    } else if (userMessage.toLowerCase() === "not required") {
+      // NEW: Mark task as completed, stop reminders
+      const updatedTasks = data.tasks.map((task) =>
+        task.taskId === taskId
+          ? { ...task, task_done: "Completed", reminder: "false" }
+          : task
+      );
+
+      await supabase
+        .from("grouped_tasks")
+        .update({ tasks: updatedTasks })
+        .eq("name", assignee.toUpperCase())
+        .eq("employerNumber", session.fromNumber);
+
+      const job = cronJobs.get(taskId);
+      if (job?.timeoutId) clearTimeout(job.timeoutId);
+      if (job?.cron) job.cron.stop();
+      cronJobs.delete(taskId);
+      await supabase.from("reminders").delete().eq("taskId", taskId);
+
+      sendMessage(From, "Thank you! The task has been marked as completed! ✅");
+      sendMessage(
+        session.fromNumber,
+        `The task *${session.task}* assigned to *${session.assignee}* was completed. ✅`
+      );
+
+      delete userSessions[From];
+    } else {
+      sendMessage(From, "Please respond with 'Yes' or 'No' to the follow-up question.");
+    }
+  }
+  else {
     const prompt = `
 You are a helpful task manager assistant. Respond with a formal tone and
 a step-by-step format.
@@ -496,7 +572,7 @@ Thank you for providing the task details! Here's a quick summary:
                 delete userSessions[From];
                 session.conversationHistory = [];
 
-                await fetch("https://reminder-test-new-production.up.railway.app/update-reminder", {
+                await fetch("http://localhost:8000/update-reminder", {
                   method: "POST",
                   headers: {
                     "Content-Type": "application/json",
@@ -829,8 +905,12 @@ async function makeTwilioRequest() {
     // Parse ButtonPayload (format: yes_<taskId> or no_<taskId>)
     const [response, taskId] = buttonPayload.split("_");
 
-    if (!taskId || !["yes", "no"].includes(response.toLowerCase())) {
-      console.error("Invalid ButtonPayload format:", ButtonPayload);
+    console.log('response, taskId', '===============================>>>>>>>>>>', response, taskId);
+    
+
+    if (!taskId || !["yes", "no", "yup", "nope"].includes(response.toLowerCase())) {
+      console.error("Invalid ButtonPayload format:", buttonPayload);
+            const twiml = new MessagingResponse();
       twiml.message("Error: Invalid response. Please use the provided buttons.");
       res.setHeader("Content-Type", "text/xml");
       return res.status(200).send(twiml.toString());
@@ -855,6 +935,7 @@ async function makeTwilioRequest() {
 
     if (!matchedRow) {
       console.error(`No task found for taskId: ${taskId}`);
+      const twiml = new MessagingResponse();
       twiml.message("Error: Task not found.");
       res.setHeader("Content-Type", "text/xml");
       return res.status(200).send(twiml.toString());
@@ -863,9 +944,17 @@ async function makeTwilioRequest() {
     // Get the specific task
     const matchedTask = matchedRow.tasks.find((task) => task.taskId === taskId);
 
+        const step = ["yup", "nope"].includes(response.toLowerCase()) ? 7 : 5;
+         const mappedResponse = response.toLowerCase() === "yup" ? "yes please" : 
+                         response.toLowerCase() === "nope" ? "not required" : 
+                         response.toLowerCase();
+
+        console.log('step------------->', step);
+        console.log('mappedResponse-------------------------------->>>>>>>>>>>>>>>', mappedResponse);
+        
     // Initialize user session with task details
     userSessions[From] = {
-      step: 5, // Set to step 5 for handling Yes/No responses
+      step: step, // Set to step 5 for handling Yes/No responses
       task: matchedTask.task_details,
       assignee: matchedRow.name,
       fromNumber: matchedRow.employerNumber,
@@ -874,7 +963,7 @@ async function makeTwilioRequest() {
     };
 
     // Pass the button response to handleUserInput
-    await handleUserInput(response.toLowerCase(), From);
+    await handleUserInput(mappedResponse.toLowerCase(), From);
 
     // Respond to Twilio
     res.setHeader("Content-Type", "text/xml");
