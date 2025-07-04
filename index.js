@@ -730,7 +730,7 @@ Thank you for providing the task details! Here's a quick summary:
       console.log("List Picker message sent successfully");
         }
 
-         else if(taskList.length === 10){
+         else if(taskList.length >= 10){
 
               console.log('inside task length which is 10')
            await sendMessage(
