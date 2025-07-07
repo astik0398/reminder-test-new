@@ -72,23 +72,57 @@ function formatDueDate(dueDateTime) {
   const year = date.getFullYear();
 
   const monthNames = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December"
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
   ];
 
   // Function to get the ordinal suffix
   const getOrdinalSuffix = (n) => {
     if (n > 3 && n < 21) return n + "th";
     switch (n % 10) {
-      case 1: return n + "st";
-      case 2: return n + "nd";
-      case 3: return n + "rd";
-      default: return n + "th";
+      case 1:
+        return n + "st";
+      case 2:
+        return n + "nd";
+      case 3:
+        return n + "rd";
+      default:
+        return n + "th";
     }
   };
 
-  const formattedDate = `${getOrdinalSuffix(day)} ${monthNames[monthIndex]} ${year}`;
+  const formattedDate = `${getOrdinalSuffix(day)} ${
+    monthNames[monthIndex]
+  } ${year}`;
   return formattedDate;
+}
+
+function extractTime(datetimeStr) {
+  // Assumes format "YYYY-MM-DD HH:MM"
+  const parts = datetimeStr.split(" ");
+  if (parts.length === 2) {
+    return parts[1]; // returns "20:00"
+  }
+  return null; // return null if format is invalid
+}
+
+function extractDate(datetimeStr) {
+  // Assumes format "YYYY-MM-DD HH:MM"
+  const parts = datetimeStr.split(" ");
+  if (parts.length === 2) {
+    return parts[0]; // returns "2025-07-27"
+  }
+  return null; // return null if format is invalid
 }
 
 const getCurrentDate = () => {
@@ -195,18 +229,18 @@ async function handleUserInput(userMessage, From) {
         null,
         true,
         {
-          "1": taskId, // Unique payload for follow-up
+          1: taskId, // Unique payload for follow-up
         },
         process.env.TWILIO_REMINDER_FOLLOWUP_TEMPLATE_SID // Reuse existing template or create a new one
       );
 
       // console.log("updatedTasks --->", updatedTasks);
 
-        userSessions[From] = {
+      userSessions[From] = {
         ...session,
         step: 7, // New step for follow-up
         originalReminderTime: matchedTask.due_date.split(" ")[1] || "09:00", // Store original reminder time or default
-      }
+      };
     } else if (userMessage.toLowerCase() === "no") {
       sendMessage(
         From,
@@ -270,8 +304,8 @@ async function handleUserInput(userMessage, From) {
     }
 
     delete userSessions[From];
-  } 
-  else if (session.step === 7) { // NEW: Handle follow-up response
+  } else if (session.step === 7) {
+    // NEW: Handle follow-up response
     const taskId = session.taskId;
     const assignee = session.assignee;
 
@@ -290,8 +324,11 @@ async function handleUserInput(userMessage, From) {
 
     const matchedTask = data.tasks.find((task) => task.taskId === taskId);
 
-    console.log('userMessageeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', userMessage);
-    
+    console.log(
+      "userMessageeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      userMessage
+    );
+
     if (userMessage.toLowerCase() === "yes please") {
       // NEW: Schedule reminder for tomorrow, keep task as Pending
       const now = moment().tz("Asia/Kolkata");
@@ -368,10 +405,12 @@ async function handleUserInput(userMessage, From) {
 
       delete userSessions[From];
     } else {
-      sendMessage(From, "Please respond with 'Yes' or 'No' to the follow-up question.");
+      sendMessage(
+        From,
+        "Please respond with 'Yes' or 'No' to the follow-up question."
+      );
     }
-  }
-  else {
+  } else {
     const prompt = `
 You are a helpful task manager assistant. Respond with a formal tone and
 a step-by-step format.
@@ -586,184 +625,332 @@ Thank you for providing the task details! Here's a quick summary:
                 //   }* has been assigned to *${taskData.assignee.toUpperCase()}*\n🗓️ *Due Date:* ${dueDateTime}`
                 // );
 
-                console.log('inside handleUserInput data---->>>>',data);
-                
+                console.log("inside handleUserInput data---->>>>", data);
 
                 const taskList = data[0].tasks
-          .filter((task) => task.task_done === "Pending") // Only show pending tasks
-          .slice(0, 10) // Twilio list picker supports up to 10 items
-          
-                    console.log('inside handleUserInput taskList lengthh---->>>>',taskList.length);
+                  .filter((task) => task.task_done === "Pending") // Only show pending tasks
+                  .slice(0, 10); // Twilio list picker supports up to 10 items
 
-
-          const templateData = {
-    "1": taskData.task, // Task name for the assignment message
-    "2": taskData.assignee.toUpperCase(), // Assignee name
-    "3": dueDateTime, // Due date and time
-  };
-
-  taskList.forEach((task, index) => {
-    console.log('inside for each =======>>>>>', task);
-    
-    templateData[`${index + 4}`] = `Due Date: ${formatDueDate(task.due_date)}`;
-    templateData[`${index + 4}_description`] = `Task: ${task.task_details}`;
-    templateData[`task_${index}`] = task.taskId; 
-  });
-          console.log('inside handleUserInput taskList---->>>>',taskList);
-    console.log("templateData:::::::::::::", templateData);
-
-
-      try {
-
-        if(taskList.length === 1){
-                        console.log('inside task length which is 1')
-
-           await sendMessage(
-        From,
-        null, // No body for template
-        true, // isTemplate flag
-        templateData,
-        "HX143dece1a4b71701e48172ecf1028544" // Content SID for the List Picker template
-      );
-      console.log("List Picker message sent successfully");
-        }
-          else if(taskList.length === 2){
-                          console.log('inside task length which is 2')
-
-           await sendMessage(
-        From,
-        null, // No body for template
-        true, // isTemplate flag
-        templateData,
-        "HX49a52e852db353767236c0d861b424cb" // Content SID for the List Picker template
-      );
-      console.log("List Picker message sent successfully");
-        }
-            else if(taskList.length === 3){
-                            console.log('inside task length which is 3')
-
-           await sendMessage(
-        From,
-        null, // No body for template
-        true, // isTemplate flag
-        templateData,
-        "HXebe78675adff94bec5ec589fa152a0bf" // Content SID for the List Picker template
-      );
-      console.log("List Picker message sent successfully");
-        }
-            else if(taskList.length === 4){
-
-              console.log('inside task length which is 4')
-           await sendMessage(
-        From,
-        null, // No body for template
-        true, // isTemplate flag
-        templateData,
-        "HXb62868d80285ddf8dbb3331ee500c779" // Content SID for the List Picker template
-      );
-      console.log("List Picker message sent successfully");
-        }
-
-        else if(taskList.length === 5){
-
-              console.log('inside task length which is 5')
-           await sendMessage(
-        From,
-        null, // No body for template
-        true, // isTemplate flag
-        templateData,
-        "HXbddd566270726c60dd8eab03e810691e" // Content SID for the List Picker template
-      );
-      console.log("List Picker message sent successfully");
-        }
-
-        
-        else if(taskList.length === 6){
-
-              console.log('inside task length which is 6')
-           await sendMessage(
-        From,
-        null, // No body for template
-        true, // isTemplate flag
-        templateData,
-        "HX92f432ace1ce5ea5831c9724f43fe2f9" // Content SID for the List Picker template
-      );
-      console.log("List Picker message sent successfully");
-        }
-
-        else if(taskList.length === 7){
-
-              console.log('inside task length which is 7')
-           await sendMessage(
-        From,
-        null, // No body for template
-        true, // isTemplate flag
-        templateData,
-        "HX728e5be86b84bc559ba24a48e96b7451" // Content SID for the List Picker template
-      );
-      console.log("List Picker message sent successfully");
-        }
-
-        else if(taskList.length === 8){
-
-              console.log('inside task length which is 8')
-           await sendMessage(
-        From,
-        null, // No body for template
-        true, // isTemplate flag
-        templateData,
-        "HX22bfc9a9f4bd64345e8673ba3bede61b" // Content SID for the List Picker template
-      );
-      console.log("List Picker message sent successfully");
-        }
-
-        else if(taskList.length === 9){
-
-              console.log('inside task length which is 9')
-           await sendMessage(
-        From,
-        null, // No body for template
-        true, // isTemplate flag
-        templateData,
-        "HX3805195cb6e0e7e5b0ef7d67235700cb" // Content SID for the List Picker template
-      );
-      console.log("List Picker message sent successfully");
-        }
-
-         else if(taskList.length >= 10){
-
-              console.log('inside task length which is 10')
-           await sendMessage(
-        From,
-        null, // No body for template
-        true, // isTemplate flag
-        templateData,
-        "HX0b055274ff5b8a0a93e5509997837daf" // Content SID for the List Picker template
-      );
-      console.log("List Picker message sent successfully");
-        }
-
-    } catch (sendError) {
-      console.error("Error sending List Picker message:", sendError);
-      await sendMessage(From, "⚠️ Error displaying task list. Please try again.");
-      return;
-    }
-
-                   sendMessage(
-                  `whatsapp:+${assignedPerson.phone}`,
-                  null, // No body for template
-                  true, // isTemplate flag
-                  {
-                    "1": taskData.assignee.toUpperCase(),
-                    "2": taskData.task,
-                    "3": dueDateTime
-                  },
-                  process.env.TWILIO_TASK_TEMPLATE_SID
+                console.log(
+                  "inside handleUserInput taskList lengthh---->>>>",
+                  taskList.length
                 );
+
+                const templateData = {
+                  1: taskData.task, // Task name for the assignment message
+                  2: taskData.assignee.toUpperCase(), // Assignee name
+                  3: dueDateTime, // Due date and time
+                };
+
+                taskList.forEach((task, index) => {
+                  console.log("inside for each =======>>>>>", task);
+
+                  templateData[`${index + 4}`] = `Due Date: ${formatDueDate(
+                    task.due_date
+                  )}`;
+                  templateData[
+                    `${index + 4}_description`
+                  ] = `Task: ${task.task_details}`;
+                  templateData[`task_${index}`] = task.taskId;
+                });
+                console.log(
+                  "inside handleUserInput taskList---->>>>",
+                  taskList
+                );
+                console.log("templateData:::::::::::::", templateData);
+
+                try {
+                  if (taskList.length === 1) {
+                    console.log("inside task length which is 1");
+
+                    await sendMessage(
+                      From,
+                      null, // No body for template
+                      true, // isTemplate flag
+                      templateData,
+                      "HX143dece1a4b71701e48172ecf1028544" // Content SID for the List Picker template
+                    );
+                    console.log("List Picker message sent successfully");
+                  } else if (taskList.length === 2) {
+                    console.log("inside task length which is 2");
+
+                    await sendMessage(
+                      From,
+                      null, // No body for template
+                      true, // isTemplate flag
+                      templateData,
+                      "HX49a52e852db353767236c0d861b424cb" // Content SID for the List Picker template
+                    );
+                    console.log("List Picker message sent successfully");
+                  } else if (taskList.length === 3) {
+                    console.log("inside task length which is 3");
+
+                    await sendMessage(
+                      From,
+                      null, // No body for template
+                      true, // isTemplate flag
+                      templateData,
+                      "HXebe78675adff94bec5ec589fa152a0bf" // Content SID for the List Picker template
+                    );
+                    console.log("List Picker message sent successfully");
+                  } else if (taskList.length === 4) {
+                    console.log("inside task length which is 4");
+                    await sendMessage(
+                      From,
+                      null, // No body for template
+                      true, // isTemplate flag
+                      templateData,
+                      "HXb62868d80285ddf8dbb3331ee500c779" // Content SID for the List Picker template
+                    );
+                    console.log("List Picker message sent successfully");
+                  } else if (taskList.length === 5) {
+                    console.log("inside task length which is 5");
+                    await sendMessage(
+                      From,
+                      null, // No body for template
+                      true, // isTemplate flag
+                      templateData,
+                      "HXbddd566270726c60dd8eab03e810691e" // Content SID for the List Picker template
+                    );
+                    console.log("List Picker message sent successfully");
+                  } else if (taskList.length === 6) {
+                    console.log("inside task length which is 6");
+                    await sendMessage(
+                      From,
+                      null, // No body for template
+                      true, // isTemplate flag
+                      templateData,
+                      "HX92f432ace1ce5ea5831c9724f43fe2f9" // Content SID for the List Picker template
+                    );
+                    console.log("List Picker message sent successfully");
+                  } else if (taskList.length === 7) {
+                    console.log("inside task length which is 7");
+                    await sendMessage(
+                      From,
+                      null, // No body for template
+                      true, // isTemplate flag
+                      templateData,
+                      "HX728e5be86b84bc559ba24a48e96b7451" // Content SID for the List Picker template
+                    );
+                    console.log("List Picker message sent successfully");
+                  } else if (taskList.length === 8) {
+                    console.log("inside task length which is 8");
+                    await sendMessage(
+                      From,
+                      null, // No body for template
+                      true, // isTemplate flag
+                      templateData,
+                      "HX22bfc9a9f4bd64345e8673ba3bede61b" // Content SID for the List Picker template
+                    );
+                    console.log("List Picker message sent successfully");
+                  } else if (taskList.length === 9) {
+                    console.log("inside task length which is 9");
+                    await sendMessage(
+                      From,
+                      null, // No body for template
+                      true, // isTemplate flag
+                      templateData,
+                      "HX3805195cb6e0e7e5b0ef7d67235700cb" // Content SID for the List Picker template
+                    );
+                    console.log("List Picker message sent successfully");
+                  } else if (taskList.length >= 10) {
+                    console.log("inside task length which is 10");
+                    await sendMessage(
+                      From,
+                      null, // No body for template
+                      true, // isTemplate flag
+                      templateData,
+                      "HX0b055274ff5b8a0a93e5509997837daf" // Content SID for the List Picker template
+                    );
+                    console.log("List Picker message sent successfully");
+                  }
+                } catch (sendError) {
+                  console.error(
+                    "Error sending List Picker message:",
+                    sendError
+                  );
+                  await sendMessage(
+                    From,
+                    "⚠️ Error displaying task list. Please try again."
+                  );
+                  return;
+                }
+
+                //    sendMessage(
+                //   `whatsapp:+${assignedPerson.phone}`,
+                //   null, // No body for template
+                //   true, // isTemplate flag
+                //   {
+                //     "1": taskData.assignee.toUpperCase(),
+                //     "2": taskData.task,
+                //     "3": dueDateTime
+                //   },
+                //   process.env.TWILIO_TASK_TEMPLATE_SID
+                // );
+
+                const newTaskList = data[0].tasks
+                  .filter((task) => task.task_done === "Pending") // Only show pending tasks
+                  .slice(0, 10); // Twilio list picker supports up to 10 items
+
+                console.log(
+                  "inside handleUserInput newTaskList lengthh---->>>>??????????????",
+                  newTaskList,
+                  newTaskList.length
+                );
+
+                const newTemplateData = {
+                  1: `*${taskData.assignee.toUpperCase()}*`, // Task name for the assignment message
+                  2: `*${taskData.task}*`, // Assignee name
+                  3: `${dueDateTime}`, // Due date and time
+                };
+
+                taskList.forEach((task, index) => {
+                  console.log("inside for each =======>>>>>??????", task);
+
+                  newTemplateData[`${index + 4}`] = `Due Date: ${formatDueDate(
+                    task.due_date
+                  )}`;
+                  newTemplateData[
+                    `${index + 4}_description`
+                  ] = `Task: ${task.task_details}`;
+                  newTemplateData[`task_${index}`] = task.taskId;
+                });
+                console.log(
+                  "inside handleUserInput taskList---->>>>???????",
+                  taskList
+                );
+                console.log(
+                  "newTemplateData:::::::::::::?????????????????",
+                  newTemplateData
+                );
+
+                try {
+                  if (taskList.length === 1) {
+                    console.log("inside task length which is ???????/ 1");
+
+                    await sendMessage(
+                      `whatsapp:+${assignedPerson.phone}`,
+                      null, // No body for template
+                      true, // isTemplate flag
+                      newTemplateData,
+                      "HX0b8b9af3fd2670f417ece43613474456" // Content SID for the List Picker template
+                    );
+                    console.log("List Picker message sent successfully");
+                  } else if (taskList.length === 2) {
+                    console.log("inside task length which is ???????? 2");
+
+                    await sendMessage(
+                      `whatsapp:+${assignedPerson.phone}`,
+                      null, // No body for template
+                      true, // isTemplate flag
+                      newTemplateData,
+                      "HX8ee715730a9c24c1ec6b03f18ac02514" // Content SID for the List Picker template
+                    );
+                    console.log("List Picker message sent successfully");
+                  } else if (taskList.length === 3) {
+                    console.log("inside task length which is ???????? 3");
+
+                    await sendMessage(
+                      `whatsapp:+${assignedPerson.phone}`,
+                      null, // No body for template
+                      true, // isTemplate flag
+                      newTemplateData,
+                      "HX6b4ca428f2a728d5c675c283db46e557" // Content SID for the List Picker template
+                    );
+                    console.log("List Picker message sent successfully");
+                  } else if (taskList.length === 4) {
+                    console.log("inside task length which is ???????? 4");
+
+                    await sendMessage(
+                      `whatsapp:+${assignedPerson.phone}`,
+                      null, // No body for template
+                      true, // isTemplate flag
+                      newTemplateData,
+                      "HXa31fad2405d6474f10d2ad500e37d0be" // Content SID for the List Picker template
+                    );
+                    console.log("List Picker message sent successfully");
+                  } else if (taskList.length === 5) {
+                    console.log("inside task length which is ???????? 5");
+
+                    await sendMessage(
+                      `whatsapp:+${assignedPerson.phone}`,
+                      null, // No body for template
+                      true, // isTemplate flag
+                      newTemplateData,
+                      "HXef85754dd2baef9c97397018834b6399" // Content SID for the List Picker template
+                    );
+                    console.log("List Picker message sent successfully");
+                  } else if (taskList.length === 6) {
+                    console.log("inside task length which is ???????? 6");
+
+                    await sendMessage(
+                      `whatsapp:+${assignedPerson.phone}`,
+                      null, // No body for template
+                      true, // isTemplate flag
+                      newTemplateData,
+                      "HX2f80487110d0c437c8b965a673e18281" // Content SID for the List Picker template
+                    );
+                    console.log("List Picker message sent successfully");
+                  } else if (taskList.length === 7) {
+                    console.log("inside task length which is ???????? 7");
+
+                    await sendMessage(
+                      `whatsapp:+${assignedPerson.phone}`,
+                      null, // No body for template
+                      true, // isTemplate flag
+                      newTemplateData,
+                      "HXc45017415b2f1d0af104f8bbaedd7b60" // Content SID for the List Picker template
+                    );
+                    console.log("List Picker message sent successfully");
+                  } else if (taskList.length === 8) {
+                    console.log("inside task length which is ???????? 8");
+
+                    await sendMessage(
+                      `whatsapp:+${assignedPerson.phone}`,
+                      null, // No body for template
+                      true, // isTemplate flag
+                      newTemplateData,
+                      "HX9fd8cac559d3a67331050c7f414dc14e" // Content SID for the List Picker template
+                    );
+                    console.log("List Picker message sent successfully");
+                  } else if (taskList.length === 9) {
+                    console.log("inside task length which is ???????? 9");
+
+                    await sendMessage(
+                      `whatsapp:+${assignedPerson.phone}`,
+                      null, // No body for template
+                      true, // isTemplate flag
+                      newTemplateData,
+                      "HXe64beb6232b2584a1fb1888530c82ff3" // Content SID for the List Picker template
+                    );
+                    console.log("List Picker message sent successfully");
+                  } else if (taskList.length >= 10) {
+                    console.log("inside task length which is ???????? 10");
+
+                    await sendMessage(
+                      `whatsapp:+${assignedPerson.phone}`,
+                      null, // No body for template
+                      true, // isTemplate flag
+                      newTemplateData,
+                      "HXb72a30c4660aa690be37396e409dadab" // Content SID for the List Picker template
+                    );
+                    console.log("List Picker message sent successfully");
+                  }
+                } catch (sendError) {
+                  console.error(
+                    "Error sending List Picker message:",
+                    sendError
+                  );
+                  await sendMessage(
+                    From,
+                    "⚠️ Error displaying task list. Please try again."
+                  );
+                  return;
+                }
                 delete userSessions[From];
                 session.conversationHistory = [];
 
-                await fetch("https://reminder-test-new-production.up.railway.app/update-reminder", {
+                await fetch("http://localhost:8000/update-reminder", {
                   method: "POST",
                   headers: {
                     "Content-Type": "application/json",
@@ -779,7 +966,6 @@ Thank you for providing the task details! Here's a quick summary:
                   .then((res) => res.json())
                   .then((response) => {
                     // console.log("taskID for reminder--->", newTask.taskId);
-
                     // console.log("Reminder endpoint response:", response);
                   })
                   .catch((error) => {
@@ -804,12 +990,18 @@ Thank you for providing the task details! Here's a quick summary:
   }
 }
 
-async function sendMessage(to, message, isTemplate = false, templateData = {}, template_id) {
+async function sendMessage(
+  to,
+  message,
+  isTemplate = false,
+  templateData = {},
+  template_id
+) {
   console.log("Sending message to:", to);
   console.log("Message:", message);
 
-  console.log('isTemplate-->',isTemplate, 'templateData-->', templateData);
-  
+  console.log("isTemplate-->", isTemplate, "templateData-->", templateData);
+
   try {
     const messageOptions = {
       from: process.env.TWILIO_PHONE_NUMBER,
@@ -1070,11 +1262,10 @@ async function insertBakeryOrder(data, From) {
 
 async function makeTwilioRequest() {
   app.post("/whatsapp", async (req, res) => {
+    const buttonPayload = req.body.ButtonPayload;
 
-    const buttonPayload = req.body.ButtonPayload
+    console.log("buttonPayload inside whatsapp endpoint---->", buttonPayload);
 
-    console.log('buttonPayload inside whatsapp endpoint---->', buttonPayload);
-    
     const { Body, From } = req.body;
 
     todayDate = getFormattedDate();
@@ -1086,80 +1277,347 @@ async function makeTwilioRequest() {
 
     let userMessage = Body.trim();
 
+    console.log(
+      "List picker Payload inside whatsapp endpoint==============---->>>>>>>>>>>>>>>>",
+      req.body.ListId
+    );
+
+    console.log(
+      "List picker Payload, req.body & userMessage inside whatsapp endpoint==============---->>>>>>>>>>>>>>>> ????????????",
+      req.body,
+      userMessage
+    );
+
+    if (req.body.ListId && req.body.ListId.startsWith("managetask_")) {
+      // This block will run when ListId starts with "managetask_"
+      const actualId = req.body.ListId.replace("managetask_", "");
+       const { data: groupedData, error } = await supabase
+        .from("grouped_tasks")
+        .select("name, phone, tasks, employerNumber");
+
+      const matchedRow = groupedData.find((row) =>
+        row.tasks?.some((task) => task.taskId === actualId)
+      );
+
+      // Get the specific task
+      const matchedTask = matchedRow.tasks.find(
+        (task) => task.taskId === actualId
+      );
+
+        sendMessage(
+        From,
+        null, // No body for template
+        true, // isTemplate flag
+        {
+          1: `*${matchedTask.task_details}*`,
+          2: extractDate(matchedTask.due_date),
+          3: extractTime(matchedTask.due_date),
+          4: matchedTask.taskId,
+        },
+        process.env.TWILIO_MANAGE_TASKS_FOLLOW_UP
+      );
+
+      return
+    }
+
+    if (req.body.ListId) {
+      const { data: groupedData, error } = await supabase
+        .from("grouped_tasks")
+        .select("name, phone, tasks, employerNumber");
+
+      const matchedRow = groupedData.find((row) =>
+        row.tasks?.some((task) => task.taskId === req.body.ListId)
+      );
+
+      // Get the specific task
+      const matchedTask = matchedRow.tasks.find(
+        (task) => task.taskId === req.body.ListId
+      );
+
+      console.log(
+        "inside req.body.ListId showing matchedTask============>>>>>>>>>>>>>",
+        matchedTask
+      );
+
+      sendMessage(
+        From,
+        null, // No body for template
+        true, // isTemplate flag
+        {
+          1: `*${matchedTask.task_details}*`,
+          2: matchedTask.due_date,
+          3: matchedTask.taskId,
+        },
+        process.env.TWILIO_LIST_PICKER_FOLLOW_UP
+      );
+
+      return;
+    }
+
     let incomingMsg = Body.trim();
 
     const userNumber = req.body.From;
 
     if (buttonPayload) {
-    console.log("ButtonPayload received:", buttonPayload);
+      console.log("ButtonPayload received:", buttonPayload);
 
-    // Parse ButtonPayload (format: yes_<taskId> or no_<taskId>)
-    const [response, taskId] = buttonPayload.split("_");
+      // Parse ButtonPayload (format: yes_<taskId> or no_<taskId>)
+      const [response, taskId] = buttonPayload.split("_");
 
-    console.log('response, taskId', '===============================>>>>>>>>>>', response, taskId);
-    
+      console.log(
+        "response, taskId",
+        "===============================>>>>>>>>>>",
+        response,
+        taskId
+      );
 
-    if (!taskId || !["yes", "no", "yup", "nope"].includes(response.toLowerCase())) {
-      console.error("Invalid ButtonPayload format:", buttonPayload);
-            const twiml = new MessagingResponse();
-      twiml.message("Error: Invalid response. Please use the provided buttons.");
+       if (response === "managetaskcompleted") {
+        console.log(
+          `✅ Marked as completed button clicked for Task ID: ${taskId}`
+        );
+
+        const { data: groupedData, error: fetchError } = await supabase
+          .from("grouped_tasks")
+          .select("id, tasks");
+
+        if (fetchError) {
+          console.error("❌ Error fetching grouped_tasks:", fetchError);
+          const twiml = new MessagingResponse();
+          twiml.message("Error: Could not retrieve task data.");
+          res.setHeader("Content-Type", "text/xml");
+          return res.status(200).send(twiml.toString());
+        }
+
+        // Step 2: Find the row containing the task
+        const matchedRow = groupedData.find((row) =>
+          row.tasks?.some((task) => task.taskId === taskId)
+        );
+
+        if (!matchedRow) {
+          console.error(`❌ Task with ID ${taskId} not found.`);
+          const twiml = new MessagingResponse();
+          twiml.message("Error: Task not found.");
+          res.setHeader("Content-Type", "text/xml");
+          return res.status(200).send(twiml.toString());
+        }
+
+        // Step 3: Map tasks and update task_done
+        const updatedTasks = matchedRow.tasks.map((task) =>
+          task.taskId === taskId ? { ...task, task_done: "Completed" } : task
+        );
+
+        // Step 4: Update Supabase
+        const { error: updateError } = await supabase
+          .from("grouped_tasks")
+          .update({ tasks: updatedTasks })
+          .eq("id", matchedRow.id);
+
+        if (updateError) {
+          console.error("❌ Error updating grouped_tasks:", updateError);
+          const twiml = new MessagingResponse();
+          twiml.message("Error: Could not mark the task as completed.");
+          res.setHeader("Content-Type", "text/xml");
+          return res.status(200).send(twiml.toString());
+        }
+
+        console.log(`✅ Task with ID ${taskId} marked as Completed.`);
+
+        const twiml = new MessagingResponse();
+        twiml.message("✅ Task has been marked as *Completed*");
+        res.setHeader("Content-Type", "text/xml");
+        return res.status(200).send(twiml.toString());
+      }
+      else if(response === "noaction"){
+         const twiml = new MessagingResponse();
+        twiml.message("❌Got it! No response has been recorded for this task");
+        res.setHeader("Content-Type", "text/xml");
+        return res.status(200).send(twiml.toString());
+      }
+
+      if (response === "completed") {
+        console.log(
+          `✅ Marked as completed button clicked for Task ID: ${taskId}`
+        );
+
+        const { data: groupedData, error: fetchError } = await supabase
+          .from("grouped_tasks")
+          .select("id, tasks");
+
+        if (fetchError) {
+          console.error("❌ Error fetching grouped_tasks:", fetchError);
+          const twiml = new MessagingResponse();
+          twiml.message("Error: Could not retrieve task data.");
+          res.setHeader("Content-Type", "text/xml");
+          return res.status(200).send(twiml.toString());
+        }
+
+        // Step 2: Find the row containing the task
+        const matchedRow = groupedData.find((row) =>
+          row.tasks?.some((task) => task.taskId === taskId)
+        );
+
+        if (!matchedRow) {
+          console.error(`❌ Task with ID ${taskId} not found.`);
+          const twiml = new MessagingResponse();
+          twiml.message("Error: Task not found.");
+          res.setHeader("Content-Type", "text/xml");
+          return res.status(200).send(twiml.toString());
+        }
+
+        // Step 3: Map tasks and update task_done
+        const updatedTasks = matchedRow.tasks.map((task) =>
+          task.taskId === taskId ? { ...task, task_done: "Completed" } : task
+        );
+
+        // Step 4: Update Supabase
+        const { error: updateError } = await supabase
+          .from("grouped_tasks")
+          .update({ tasks: updatedTasks })
+          .eq("id", matchedRow.id);
+
+        if (updateError) {
+          console.error("❌ Error updating grouped_tasks:", updateError);
+          const twiml = new MessagingResponse();
+          twiml.message("Error: Could not mark the task as completed.");
+          res.setHeader("Content-Type", "text/xml");
+          return res.status(200).send(twiml.toString());
+        }
+
+        console.log(`✅ Task with ID ${taskId} marked as Completed.`);
+
+        const twiml = new MessagingResponse();
+        twiml.message("✅ Task has been marked as *Completed*.");
+        res.setHeader("Content-Type", "text/xml");
+        return res.status(200).send(twiml.toString());
+      } else if (response === "delete") {
+        console.log(`🗑️ Delete button clicked for Task ID: ${taskId}`);
+
+        const { data: groupedData, error: fetchError } = await supabase
+          .from("grouped_tasks")
+          .select("id, tasks");
+
+        if (fetchError) {
+          console.error("❌ Error fetching grouped_tasks:", fetchError);
+          const twiml = new MessagingResponse();
+          twiml.message("Error: Could not retrieve task data.");
+          res.setHeader("Content-Type", "text/xml");
+          return res.status(200).send(twiml.toString());
+        }
+
+        // Step 2: Find the row that contains this task
+        const matchedRow = groupedData.find((row) =>
+          row.tasks?.some((task) => task.taskId === taskId)
+        );
+
+        if (!matchedRow) {
+          console.error(`❌ Task with ID ${taskId} not found.`);
+          const twiml = new MessagingResponse();
+          twiml.message("Error: Task not found.");
+          res.setHeader("Content-Type", "text/xml");
+          return res.status(200).send(twiml.toString());
+        }
+
+        // Step 3: Filter out the task to delete
+        const updatedTasks = matchedRow.tasks.filter(
+          (task) => task.taskId !== taskId
+        );
+
+        // Step 4: Update the row in Supabase
+        const { error: updateError } = await supabase
+          .from("grouped_tasks")
+          .update({ tasks: updatedTasks })
+          .eq("id", matchedRow.id);
+
+        if (updateError) {
+          console.error("❌ Error updating grouped_tasks:", updateError);
+          const twiml = new MessagingResponse();
+          twiml.message("Error: Could not delete the task.");
+          res.setHeader("Content-Type", "text/xml");
+          return res.status(200).send(twiml.toString());
+        }
+
+        console.log(`✅ Task with ID ${taskId} successfully deleted.`);
+
+        const twiml = new MessagingResponse();
+        twiml.message(`✅ Task successfully deleted.`);
+        res.setHeader("Content-Type", "text/xml");
+        return res.status(200).send(twiml.toString());
+      }
+
+      if (
+        !taskId ||
+        !["yes", "no", "yup", "nope"].includes(response.toLowerCase())
+      ) {
+        console.error("Invalid ButtonPayload format:", buttonPayload);
+        const twiml = new MessagingResponse();
+        twiml.message(
+          "Error: Invalid response. Please use the provided buttons."
+        );
+        res.setHeader("Content-Type", "text/xml");
+        return res.status(200).send(twiml.toString());
+      }
+
+      // Fetch task details from Supabase based on taskId
+      const { data: groupedData, error } = await supabase
+        .from("grouped_tasks")
+        .select("name, phone, tasks, employerNumber");
+
+      if (error) {
+        console.error("Error fetching grouped_tasks:", error);
+        twiml.message("Error: Could not retrieve task details.");
+        res.setHeader("Content-Type", "text/xml");
+        return res.status(200).send(twiml.toString());
+      }
+
+      // Find the row containing the task with the matching taskId
+      const matchedRow = groupedData.find((row) =>
+        row.tasks?.some((task) => task.taskId === taskId)
+      );
+
+      if (!matchedRow) {
+        console.error(`No task found for taskId: ${taskId}`);
+        const twiml = new MessagingResponse();
+        twiml.message("Error: Task not found.");
+        res.setHeader("Content-Type", "text/xml");
+        return res.status(200).send(twiml.toString());
+      }
+
+      // Get the specific task
+      const matchedTask = matchedRow.tasks.find(
+        (task) => task.taskId === taskId
+      );
+
+      const step = ["yup", "nope"].includes(response.toLowerCase()) ? 7 : 5;
+      const mappedResponse =
+        response.toLowerCase() === "yup"
+          ? "yes please"
+          : response.toLowerCase() === "nope"
+          ? "not required"
+          : response.toLowerCase();
+
+      console.log("step------------->", step);
+      console.log(
+        "mappedResponse-------------------------------->>>>>>>>>>>>>>>",
+        mappedResponse
+      );
+
+      // Initialize user session with task details
+      userSessions[From] = {
+        step: step, // Set to step 5 for handling Yes/No responses
+        task: matchedTask.task_details,
+        assignee: matchedRow.name,
+        fromNumber: matchedRow.employerNumber,
+        taskId: taskId,
+        conversationHistory: [],
+      };
+
+      // Pass the button response to handleUserInput
+      await handleUserInput(mappedResponse.toLowerCase(), From);
+
+      // Respond to Twilio
       res.setHeader("Content-Type", "text/xml");
-      return res.status(200).send(twiml.toString());
+      return res.status(200);
     }
-
-    // Fetch task details from Supabase based on taskId
-    const { data: groupedData, error } = await supabase
-      .from("grouped_tasks")
-      .select("name, phone, tasks, employerNumber");
-
-    if (error) {
-      console.error("Error fetching grouped_tasks:", error);
-      twiml.message("Error: Could not retrieve task details.");
-      res.setHeader("Content-Type", "text/xml");
-      return res.status(200).send(twiml.toString());
-    }
-
-    // Find the row containing the task with the matching taskId
-    const matchedRow = groupedData.find((row) =>
-      row.tasks?.some((task) => task.taskId === taskId)
-    );
-
-    if (!matchedRow) {
-      console.error(`No task found for taskId: ${taskId}`);
-      const twiml = new MessagingResponse();
-      twiml.message("Error: Task not found.");
-      res.setHeader("Content-Type", "text/xml");
-      return res.status(200).send(twiml.toString());
-    }
-
-    // Get the specific task
-    const matchedTask = matchedRow.tasks.find((task) => task.taskId === taskId);
-
-        const step = ["yup", "nope"].includes(response.toLowerCase()) ? 7 : 5;
-         const mappedResponse = response.toLowerCase() === "yup" ? "yes please" : 
-                         response.toLowerCase() === "nope" ? "not required" : 
-                         response.toLowerCase();
-
-        console.log('step------------->', step);
-        console.log('mappedResponse-------------------------------->>>>>>>>>>>>>>>', mappedResponse);
-        
-    // Initialize user session with task details
-    userSessions[From] = {
-      step: step, // Set to step 5 for handling Yes/No responses
-      task: matchedTask.task_details,
-      assignee: matchedRow.name,
-      fromNumber: matchedRow.employerNumber,
-      taskId: taskId,
-      conversationHistory: [],
-    };
-
-    // Pass the button response to handleUserInput
-    await handleUserInput(mappedResponse.toLowerCase(), From);
-
-    // Respond to Twilio
-    res.setHeader("Content-Type", "text/xml");
-    return res.status(200)
-  }
 
     if (numMedia > 0 && mediaUrl && mediaType?.startsWith("image/")) {
       const twiml = new MessagingResponse();
@@ -1312,23 +1770,23 @@ async function makeTwilioRequest() {
 
         const twiml = new MessagingResponse();
         try {
-            await sendMessage(
-                userNumber, // Send to userNumber
-                null, // No body for template
-                true, // isTemplate flag
-                {
-                    "1": await shortenUrl(authUrl) // Map {{1}} to shortened URL
-                },
-                process.env.TWILIO_MEETING_TEMPLATE_SID // Template SID
-            );
-            // Return empty TwiML response since message is sent via sendMessage
-            return res.type("text/xml").send(twiml.toString());
+          await sendMessage(
+            userNumber, // Send to userNumber
+            null, // No body for template
+            true, // isTemplate flag
+            {
+              1: await shortenUrl(authUrl), // Map {{1}} to shortened URL
+            },
+            process.env.TWILIO_MEETING_TEMPLATE_SID // Template SID
+          );
+          // Return empty TwiML response since message is sent via sendMessage
+          return res.type("text/xml").send(twiml.toString());
         } catch (error) {
-            console.error("Error sending meeting auth template:", error);
-            twiml.message(
-                "⚠️ Error initiating authentication. Please try again later."
-            );
-            return res.type("text/xml").send(twiml.toString());
+          console.error("Error sending meeting auth template:", error);
+          twiml.message(
+            "⚠️ Error initiating authentication. Please try again later."
+          );
+          return res.type("text/xml").send(twiml.toString());
         }
         // return res.type("text/xml").send(twiml.toString());
       }
@@ -1841,7 +2299,9 @@ async function initializeReminders() {
         continue;
       }
 
-      const matchedTask = matchedRow.tasks.find((task) => task.taskId === taskId);
+      const matchedTask = matchedRow.tasks.find(
+        (task) => task.taskId === taskId
+      );
 
       if (
         matchedTask.reminder !== "true" ||
@@ -1873,16 +2333,18 @@ async function initializeReminders() {
           return;
         }
 
-        console.log(`Sending reminder to: ${matchedRow.phone} for task ${taskId}`);
+        console.log(
+          `Sending reminder to: ${matchedRow.phone} for task ${taskId}`
+        );
 
         await sendMessage(
           `whatsapp:+${matchedRow.phone}`,
           null,
           true,
           {
-            "1": matchedTask.task_details,
-            "2": matchedTask.due_date,
-            "3": taskId,
+            1: matchedTask.task_details,
+            2: matchedTask.due_date,
+            3: taskId,
           },
           process.env.TWILIO_REMINDER_TEMPLATE_SID
         );
@@ -1928,7 +2390,9 @@ async function initializeReminders() {
         const delay = reminderTime.diff(now);
 
         if (delay <= 0) {
-          console.log(`One-time reminder for task ${taskId} is in the past, sending now.`);
+          console.log(
+            `One-time reminder for task ${taskId} is in the past, sending now.`
+          );
           await sendReminder();
           continue;
         }
@@ -1950,7 +2414,9 @@ async function initializeReminders() {
         const match = reminder_frequency?.match(frequencyPattern);
 
         if (!match) {
-          console.log(`Invalid reminder frequency for task ${taskId}: ${reminder_frequency}`);
+          console.log(
+            `Invalid reminder frequency for task ${taskId}: ${reminder_frequency}`
+          );
           continue;
         }
 
@@ -2007,7 +2473,9 @@ async function initializeReminders() {
               reminder_frequency,
               nextReminderTime: nextReminderTime.format("YYYY-MM-DD HH:mm:ss"),
             });
-            const nextDelay = nextReminderTime.diff(moment().tz("Asia/Kolkata"));
+            const nextDelay = nextReminderTime.diff(
+              moment().tz("Asia/Kolkata")
+            );
             const timeoutId = setTimeout(scheduleReminder, nextDelay);
             cronJobs.set(taskId, {
               timeoutId,
@@ -2052,7 +2520,10 @@ async function initializeReminders() {
             );
           }, delay);
 
-          cronJobs.set(taskId, { type: "recurring", frequency: reminder_frequency });
+          cronJobs.set(taskId, {
+            type: "recurring",
+            frequency: reminder_frequency,
+          });
         }
       }
     }
@@ -2105,7 +2576,9 @@ app.post("/update-reminder", async (req, res) => {
     );
 
     if (!matchedRow) {
-      console.log(`No matching task found for task ${taskId}. Stopping reminder.`);
+      console.log(
+        `No matching task found for task ${taskId}. Stopping reminder.`
+      );
       const job = cronJobs.get(taskId);
       if (job?.timeoutId) {
         clearTimeout(job.timeoutId);
@@ -2128,7 +2601,7 @@ app.post("/update-reminder", async (req, res) => {
       console.log(
         `Task ${taskId} doesn't need reminder anymore. Stopping reminder.`
       );
-     const job = cronJobs.get(taskId);
+      const job = cronJobs.get(taskId);
       if (job?.timeoutId) {
         clearTimeout(job.timeoutId);
       }
@@ -2140,15 +2613,13 @@ app.post("/update-reminder", async (req, res) => {
 
     // send TEMPORARY due date and time for one-time reminders
 
-     sendMessage(
-                  `whatsapp:+${matchedRow.phone}`,
-                  null, // No body for template
-                  true, // isTemplate flag
-                  { "1": matchedTask.task_details,
-                    "2": matchedTask.due_date,
-                  "3": taskId},
-                  process.env.TWILIO_REMINDER_TEMPLATE_SID
-                );
+    sendMessage(
+      `whatsapp:+${matchedRow.phone}`,
+      null, // No body for template
+      true, // isTemplate flag
+      { 1: matchedTask.task_details, 2: matchedTask.due_date, 3: taskId },
+      process.env.TWILIO_REMINDER_TEMPLATE_SID
+    );
 
     userSessions[`whatsapp:+${matchedRow.phone}`] = {
       step: 5,
