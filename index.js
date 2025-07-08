@@ -950,7 +950,7 @@ Thank you for providing the task details! Here's a quick summary:
                 delete userSessions[From];
                 session.conversationHistory = [];
 
-                await fetch("http://localhost:8000/update-reminder", {
+                await fetch("https://reminder-test-new-production.up.railway.app/update-reminder", {
                   method: "POST",
                   headers: {
                     "Content-Type": "application/json",
@@ -2878,7 +2878,7 @@ if (delayForSpecialReminder > 0) {
         .eq("employerNumber", matchedRowSpecial.employerNumber);
 
       console.log(`Stopped further reminders for task ${taskId} after special 2-hour message`);
-      
+
   }, delayForSpecialReminder);
 
   console.log(
