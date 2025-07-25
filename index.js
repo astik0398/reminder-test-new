@@ -464,7 +464,7 @@ async function handleUserInput(userMessage, From) {
                       null, // No body for template
                       true, // isTemplate flag
                       newTemplateMsg,
-                      "HX49a52e852db353767236c0d861b424cb" // Content SID for the List Picker template
+                      "HXda825067d4d47841fe98200057513274" // Content SID for the List Picker template
                     );
                     console.log("List Picker message sent successfully");
                   } else if (newtaskList.length === 3) {
@@ -475,7 +475,94 @@ async function handleUserInput(userMessage, From) {
                       null, // No body for template
                       true, // isTemplate flag
                       newTemplateMsg,
-                      "HXebe78675adff94bec5ec589fa152a0bf" // Content SID for the List Picker template
+                      "HX78a953c4dbc3f4a9bcdc44a6448aec5c" // Content SID for the List Picker template
+                    );
+                    console.log("List Picker message sent successfully");
+                  }
+
+                  else if (newtaskList.length === 4) {
+                    console.log("inside task length which is 3");
+
+                    await sendMessage(
+                      `whatsapp:+${assigneePhone}`,
+                      null, // No body for template
+                      true, // isTemplate flag
+                      newTemplateMsg,
+                      "HXa041d39221c30a3c4575feb18305cb8f" // Content SID for the List Picker template
+                    );
+                    console.log("List Picker message sent successfully");
+                  }
+
+                  else if (newtaskList.length === 5) {
+                    console.log("inside task length which is 3");
+
+                    await sendMessage(
+                      `whatsapp:+${assigneePhone}`,
+                      null, // No body for template
+                      true, // isTemplate flag
+                      newTemplateMsg,
+                      "HXcd39864c9c08cb1788610d4d64928204" // Content SID for the List Picker template
+                    );
+                    console.log("List Picker message sent successfully");
+                  }
+
+                  else if (newtaskList.length === 6) {
+                    console.log("inside task length which is 3");
+
+                    await sendMessage(
+                      `whatsapp:+${assigneePhone}`,
+                      null, // No body for template
+                      true, // isTemplate flag
+                      newTemplateMsg,
+                      "HXb24805d076347b18194b2021e7a5763a" // Content SID for the List Picker template
+                    );
+                    console.log("List Picker message sent successfully");
+                  }
+                  else if (newtaskList.length === 7) {
+                    console.log("inside task length which is 3");
+
+                    await sendMessage(
+                      `whatsapp:+${assigneePhone}`,
+                      null, // No body for template
+                      true, // isTemplate flag
+                      newTemplateMsg,
+                      "HX1e09b5dc9fc07659b24b2447b964dc1b" // Content SID for the List Picker template
+                    );
+                    console.log("List Picker message sent successfully");
+                  }
+                  else if (newtaskList.length === 8) {
+                    console.log("inside task length which is 3");
+
+                    await sendMessage(
+                      `whatsapp:+${assigneePhone}`,
+                      null, // No body for template
+                      true, // isTemplate flag
+                      newTemplateMsg,
+                      "HXb0dc5526de6b3120881186e224b958f7" // Content SID for the List Picker template
+                    );
+                    console.log("List Picker message sent successfully");
+                  }
+                   else if (newtaskList.length === 9) {
+                    console.log("inside task length which is 3");
+
+                    await sendMessage(
+                      `whatsapp:+${assigneePhone}`,
+                      null, // No body for template
+                      true, // isTemplate flag
+                      newTemplateMsg,
+                      "HX0219abbc921e8400cebbe8d0e1dd0fff" // Content SID for the List Picker template
+                    );
+                    console.log("List Picker message sent successfully");
+                  }
+                  else if (newtaskList.length >= 10) {
+                    console.log("inside task length which is 3");
+
+                    await sendMessage(
+                      `whatsapp:+${assigneePhone}`,
+                      null, // No body for template
+                      true, // isTemplate flag
+                      newTemplateMsg,
+                      "HXf6a77af216feafb39e2fe4f2dfe8fc10" // Content SID for the List Picker template
                     );
                     console.log("List Picker message sent successfully");
                   }
@@ -538,17 +625,6 @@ async function handleUserInput(userMessage, From) {
     console.error("Error rescheduling reminder:", error);
     await sendMessage(From, "⚠️ Failed to reschedule reminder. Please try again.");
   }
-
-    // sendMessage(
-    //     `whatsapp:+${assigneePhone}`,
-    //     null, // No body for template
-    //     true, // isTemplate flag
-    //     {
-    //       1: `*${updatedTask.task_details}*`,
-    //       2: `*${deadlineInput}*`
-    //     },
-    //     "HXfb875309b15d7128367c4f9305dd8276"
-    //   );
 
   // Clean up session
   delete userSessions[From];
