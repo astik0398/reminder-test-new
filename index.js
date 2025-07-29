@@ -341,296 +341,304 @@ async function handleUserInput(userMessage, From) {
     }
 
     delete userSessions[From];
-  } else if(session.step === 8){
-    console.log('<--------------------im inside this step which is 8-------------->');
-    
+  } else if (session.step === 8) {
+    console.log(
+      "<--------------------im inside this step which is 8-------------->"
+    );
+
     const { taskId, number } = userSessions[From];
 
-        console.log('<--------------------im inside this step which is 8 after console logging taskId-------------->', taskId);
-
-  // Validate input format: YYYY-MM-DD HH:MM
-  const deadlineInput = userMessage.trim();
-  const isValidFormat = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(deadlineInput);
-
-  if (!isValidFormat) {
-    await sendMessage(
-      From,
-      "❌ Invalid format. Please send the date and time like this:\n*2025-07-23 14:47*"
+    console.log(
+      "<--------------------im inside this step which is 8 after console logging taskId-------------->",
+      taskId
     );
-    return;
-  }
+
+    // Validate input format: YYYY-MM-DD HH:MM
+    const deadlineInput = userMessage.trim();
+const isValidFormat = /^\d{4}-\d{2}-\d{2} \d{1,2}:\d{2}$/.test(deadlineInput);
+
+    if (!isValidFormat) {
+      await sendMessage(
+        From,
+        "❌ Invalid format. Please send the date and time like this:\n*2025-07-23 14:47*"
+      );
+      return;
+    }
+
+    // ⏱ Normalize to HH:mm format
+const [datePart, timePart] = deadlineInput.split(" ");
+let [hour, minute] = timePart.split(":");
+
+if (hour.length === 1) hour = "0" + hour;
+
+const normalizedDeadline = `${datePart} ${hour}:${minute}`;
 
     // Proceed to update the deadline
-  const { data: groupedData, error: fetchError } = await supabase
-    .from("grouped_tasks")
-    .select("id, tasks, name, employerNumber");
+    const { data: groupedData, error: fetchError } = await supabase
+      .from("grouped_tasks")
+      .select("id, tasks, name, employerNumber");
 
-  if (fetchError) {
-    console.error("❌ Error fetching tasks:", fetchError);
-    await sendMessage(From, "Error: Could not retrieve task data.");
-    return;
-  }
+    if (fetchError) {
+      console.error("❌ Error fetching tasks:", fetchError);
+      await sendMessage(From, "Error: Could not retrieve task data.");
+      return;
+    }
 
-  const matchedRow = groupedData.find((row) =>
-    row.tasks?.some((task) => task.taskId === taskId)
-  );
+    const matchedRow = groupedData.find((row) =>
+      row.tasks?.some((task) => task.taskId === taskId)
+    );
 
-  if (!matchedRow) {
-    await sendMessage(From, "❌ Task not found.");
-    return;
-  }
+    if (!matchedRow) {
+      await sendMessage(From, "❌ Task not found.");
+      return;
+    }
 
-   const updatedTasks = matchedRow.tasks.map((task) =>
-    task.taskId === taskId ? { ...task, due_date: deadlineInput, task_done:'Pending' } : task
-  );
+    const updatedTasks = matchedRow.tasks.map((task) =>
+      task.taskId === taskId
+        ? { ...task, due_date: normalizedDeadline, task_done: "Pending" }
+        : task
+    );
 
-  const { error: updateError } = await supabase
-    .from("grouped_tasks")
-    .update({ tasks: updatedTasks })
-    .eq("id", matchedRow.id);
+    const { error: updateError } = await supabase
+      .from("grouped_tasks")
+      .update({ tasks: updatedTasks })
+      .eq("id", matchedRow.id);
 
-  if (updateError) {
-    console.error("❌ Error updating deadline:", updateError);
-    await sendMessage(From, "❌ Failed to update deadline. Please try again.");
-    return;
-  }
+    if (updateError) {
+      console.error("❌ Error updating deadline:", updateError);
+      await sendMessage(
+        From,
+        "❌ Failed to update deadline. Please try again."
+      );
+      return;
+    }
 
-  // ✅ Success
-  await sendMessage(
-    From,
-    `✅ Deadline for the task has been updated to *${deadlineInput}*`
-  );
+    // ✅ Success
+    await sendMessage(
+      From,
+      `✅ Deadline for the task has been updated to *${normalizedDeadline}*`
+    );
 
     // Optionally notify the assignee as well here
-  const updatedTask = updatedTasks.find((task) => task.taskId === taskId);
-  const assigneePhone = session.number;
+    const updatedTask = updatedTasks.find((task) => task.taskId === taskId);
+    const assigneePhone = session.number;
 
-  console.log('updated task & assignee phone, userSessions, groupedData----->🔋🔋🔋', updatedTask, matchedRow);
+    console.log(
+      "updated task & assignee phone, userSessions, groupedData----->🔋🔋🔋",
+      updatedTask,
+      matchedRow
+    );
 
     const { data: newgroupedData, error: newfetchError } = await supabase
-    .from("grouped_tasks")
-    .select("id, tasks, name, employerNumber");
+      .from("grouped_tasks")
+      .select("id, tasks, name, employerNumber");
 
-      const updatedmatchedRow = newgroupedData.find((row) =>
-    row.tasks?.some((task) => task.taskId === taskId)
-  );
+    const updatedmatchedRow = newgroupedData.find((row) =>
+      row.tasks?.some((task) => task.taskId === taskId)
+    );
 
-  const newtaskList = updatedmatchedRow.tasks
-                  .filter(
-                    (task) =>
-                      task.task_done === "Pending" ||
-                      task.task_done == "Not Completed"
-                  ) // Only show pending tasks
+    const newtaskList = updatedmatchedRow.tasks.filter(
+      (task) =>
+        task.task_done === "Pending" || task.task_done == "Not Completed"
+    ); // Only show pending tasks
 
-                console.log(
-                  "inside handleUserInput taskList lengthh---->>>>",newtaskList,
-                  newtaskList.length
-                );
+    console.log(
+      "inside handleUserInput taskList lengthh---->>>>",
+      newtaskList,
+      newtaskList.length
+    );
 
-                const newTemplateMsg = {
-                  1: updatedTask.task_details,
-                  2: deadlineInput,
-                }
-
-                 newtaskList.forEach((task, index) => {
-                  console.log("inside for each =======>>>>>", task);
-
-                  newTemplateMsg[`${index + 4}`] = `Due Date: ${formatDueDate(
-                    task.due_date
-                  )}`;
-                  newTemplateMsg[
-                    `${index + 4}_description`
-                  ] = `Task: ${task.task_details}`;
-                  newTemplateMsg[`task_${index}`] = task.taskId;
-                });
-
-                try {
-                   if (newtaskList.length === 1) {
-                    console.log("inside task length which is 1");
-
-                    await sendMessage(
-                      `whatsapp:+${assigneePhone}`,
-                      null, // No body for template
-                      true, // isTemplate flag
-                      newTemplateMsg,
-                      "HXfb875309b15d7128367c4f9305dd8276" // Content SID for the List Picker template
-                    );
-                    console.log("List Picker message sent successfully");
-                  } else if (newtaskList.length === 2) {
-                    console.log("inside task length which is 2");
-
-                    await sendMessage(
-                      `whatsapp:+${assigneePhone}`,
-                      null, // No body for template
-                      true, // isTemplate flag
-                      newTemplateMsg,
-                      "HXda825067d4d47841fe98200057513274" // Content SID for the List Picker template
-                    );
-                    console.log("List Picker message sent successfully");
-                  } else if (newtaskList.length === 3) {
-                    console.log("inside task length which is 3");
-
-                    await sendMessage(
-                      `whatsapp:+${assigneePhone}`,
-                      null, // No body for template
-                      true, // isTemplate flag
-                      newTemplateMsg,
-                      "HX78a953c4dbc3f4a9bcdc44a6448aec5c" // Content SID for the List Picker template
-                    );
-                    console.log("List Picker message sent successfully");
-                  }
-
-                  else if (newtaskList.length === 4) {
-                    console.log("inside task length which is 3");
-
-                    await sendMessage(
-                      `whatsapp:+${assigneePhone}`,
-                      null, // No body for template
-                      true, // isTemplate flag
-                      newTemplateMsg,
-                      "HXa041d39221c30a3c4575feb18305cb8f" // Content SID for the List Picker template
-                    );
-                    console.log("List Picker message sent successfully");
-                  }
-
-                  else if (newtaskList.length === 5) {
-                    console.log("inside task length which is 3");
-
-                    await sendMessage(
-                      `whatsapp:+${assigneePhone}`,
-                      null, // No body for template
-                      true, // isTemplate flag
-                      newTemplateMsg,
-                      "HXcd39864c9c08cb1788610d4d64928204" // Content SID for the List Picker template
-                    );
-                    console.log("List Picker message sent successfully");
-                  }
-
-                  else if (newtaskList.length === 6) {
-                    console.log("inside task length which is 3");
-
-                    await sendMessage(
-                      `whatsapp:+${assigneePhone}`,
-                      null, // No body for template
-                      true, // isTemplate flag
-                      newTemplateMsg,
-                      "HXb24805d076347b18194b2021e7a5763a" // Content SID for the List Picker template
-                    );
-                    console.log("List Picker message sent successfully");
-                  }
-                  else if (newtaskList.length === 7) {
-                    console.log("inside task length which is 3");
-
-                    await sendMessage(
-                      `whatsapp:+${assigneePhone}`,
-                      null, // No body for template
-                      true, // isTemplate flag
-                      newTemplateMsg,
-                      "HX1e09b5dc9fc07659b24b2447b964dc1b" // Content SID for the List Picker template
-                    );
-                    console.log("List Picker message sent successfully");
-                  }
-                  else if (newtaskList.length === 8) {
-                    console.log("inside task length which is 3");
-
-                    await sendMessage(
-                      `whatsapp:+${assigneePhone}`,
-                      null, // No body for template
-                      true, // isTemplate flag
-                      newTemplateMsg,
-                      "HXb0dc5526de6b3120881186e224b958f7" // Content SID for the List Picker template
-                    );
-                    console.log("List Picker message sent successfully");
-                  }
-                   else if (newtaskList.length === 9) {
-                    console.log("inside task length which is 3");
-
-                    await sendMessage(
-                      `whatsapp:+${assigneePhone}`,
-                      null, // No body for template
-                      true, // isTemplate flag
-                      newTemplateMsg,
-                      "HX0219abbc921e8400cebbe8d0e1dd0fff" // Content SID for the List Picker template
-                    );
-                    console.log("List Picker message sent successfully");
-                  }
-                  else if (newtaskList.length >= 10) {
-                    console.log("inside task length which is 3");
-
-                    await sendMessage(
-                      `whatsapp:+${assigneePhone}`,
-                      null, // No body for template
-                      true, // isTemplate flag
-                      newTemplateMsg,
-                      "HXf6a77af216feafb39e2fe4f2dfe8fc10" // Content SID for the List Picker template
-                    );
-                    console.log("List Picker message sent successfully");
-                  }
-                } catch (sendError) {
-                  console.error(
-                    "Error sending List Picker message:",
-                    sendError
-                  );
-                  await sendMessage(
-                    From,
-                    "⚠️ Error displaying task list. Please try again."
-                  );
-                  return;
-                }
-
-  // NEW: Reschedule the reminder using the /update-reminder endpoint
-  try {
-    // Clear any existing reminder for this task
-    const existingJob = cronJobs.get(taskId);
-    if (existingJob?.timeoutId) {
-      clearTimeout(existingJob.timeoutId);
-      console.log(`Cleared existing timeout for task ${taskId}`);
-    }
-    if (existingJob?.cron) {
-      existingJob.cron.stop();
-      console.log(`Stopped existing cron job for task ${taskId}`);
-    }
-    cronJobs.delete(taskId);
-
-    // Delete existing reminder from Supabase
-    await supabase.from("reminders").delete().eq("taskId", taskId);
-
-    // Prepare data for the /update-reminder endpoint
-    const reminderData = {
-      reminder_type: updatedTask.reminder_type || "recurring", // Default to recurring if not specified
-      reminder_frequency: updatedTask.reminder_frequency || null,
-      taskId: taskId,
-      dueDateTime: deadlineInput, // Updated due date and time
-      reminderDateTime: updatedTask.reminderDateTime || null, // Use existing reminderDateTime for one-time reminders
+    const newTemplateMsg = {
+      1: updatedTask.task_details,
+      2: normalizedDeadline,
     };
 
-    // Call the /update-reminder endpoint
-    const response = await fetch("http://localhost:8000/update-reminder", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(reminderData),
+    newtaskList.forEach((task, index) => {
+      console.log("inside for each =======>>>>>", task);
+
+      newTemplateMsg[`${index + 4}`] = `${formatDueDate(
+        task.due_date
+      )}`;
+      newTemplateMsg[`${index + 4}_description`] = `${task.task_details}`;
+      newTemplateMsg[`task_${index}`] = task.taskId;
     });
 
-    const result = await response.json();
-    console.log(`Reminder rescheduled for task ${taskId}:`, result);
+    try {
+      if (newtaskList.length === 1) {
+        console.log("inside task length which is 1");
 
-    // Update user session to reflect that the task is back in a reminder state
-    userSessions[From] = {
-      ...userSessions[From],
-      step: 0, // Reset step to allow further interactions
-    };
-  } catch (error) {
-    console.error("Error rescheduling reminder:", error);
-    await sendMessage(From, "⚠️ Failed to reschedule reminder. Please try again.");
-  }
+        await sendMessage(
+          `whatsapp:+${assigneePhone}`,
+          null, // No body for template
+          true, // isTemplate flag
+          newTemplateMsg,
+          "HXfb875309b15d7128367c4f9305dd8276" // Content SID for the List Picker template
+        );
+        console.log("List Picker message sent successfully");
+      } else if (newtaskList.length === 2) {
+        console.log("inside task length which is 2");
 
-  // Clean up session
-  delete userSessions[From];
+        await sendMessage(
+          `whatsapp:+${assigneePhone}`,
+          null, // No body for template
+          true, // isTemplate flag
+          newTemplateMsg,
+          "HXda825067d4d47841fe98200057513274" // Content SID for the List Picker template
+        );
+        console.log("List Picker message sent successfully");
+      } else if (newtaskList.length === 3) {
+        console.log("inside task length which is 3");
 
-  return;
+        await sendMessage(
+          `whatsapp:+${assigneePhone}`,
+          null, // No body for template
+          true, // isTemplate flag
+          newTemplateMsg,
+          "HX78a953c4dbc3f4a9bcdc44a6448aec5c" // Content SID for the List Picker template
+        );
+        console.log("List Picker message sent successfully");
+      } else if (newtaskList.length === 4) {
+        console.log("inside task length which is 3");
 
+        await sendMessage(
+          `whatsapp:+${assigneePhone}`,
+          null, // No body for template
+          true, // isTemplate flag
+          newTemplateMsg,
+          "HXa041d39221c30a3c4575feb18305cb8f" // Content SID for the List Picker template
+        );
+        console.log("List Picker message sent successfully");
+      } else if (newtaskList.length === 5) {
+        console.log("inside task length which is 3");
+
+        await sendMessage(
+          `whatsapp:+${assigneePhone}`,
+          null, // No body for template
+          true, // isTemplate flag
+          newTemplateMsg,
+          "HXcd39864c9c08cb1788610d4d64928204" // Content SID for the List Picker template
+        );
+        console.log("List Picker message sent successfully");
+      } else if (newtaskList.length === 6) {
+        console.log("inside task length which is 3");
+
+        await sendMessage(
+          `whatsapp:+${assigneePhone}`,
+          null, // No body for template
+          true, // isTemplate flag
+          newTemplateMsg,
+          "HXb24805d076347b18194b2021e7a5763a" // Content SID for the List Picker template
+        );
+        console.log("List Picker message sent successfully");
+      } else if (newtaskList.length === 7) {
+        console.log("inside task length which is 3");
+
+        await sendMessage(
+          `whatsapp:+${assigneePhone}`,
+          null, // No body for template
+          true, // isTemplate flag
+          newTemplateMsg,
+          "HX1e09b5dc9fc07659b24b2447b964dc1b" // Content SID for the List Picker template
+        );
+        console.log("List Picker message sent successfully");
+      } else if (newtaskList.length === 8) {
+        console.log("inside task length which is 3");
+
+        await sendMessage(
+          `whatsapp:+${assigneePhone}`,
+          null, // No body for template
+          true, // isTemplate flag
+          newTemplateMsg,
+          "HXb0dc5526de6b3120881186e224b958f7" // Content SID for the List Picker template
+        );
+        console.log("List Picker message sent successfully");
+      } else if (newtaskList.length === 9) {
+        console.log("inside task length which is 3");
+
+        await sendMessage(
+          `whatsapp:+${assigneePhone}`,
+          null, // No body for template
+          true, // isTemplate flag
+          newTemplateMsg,
+          "HX0219abbc921e8400cebbe8d0e1dd0fff" // Content SID for the List Picker template
+        );
+        console.log("List Picker message sent successfully");
+      } else if (newtaskList.length >= 10) {
+        console.log("inside task length which is 3");
+
+        await sendMessage(
+          `whatsapp:+${assigneePhone}`,
+          null, // No body for template
+          true, // isTemplate flag
+          newTemplateMsg,
+          "HXf6a77af216feafb39e2fe4f2dfe8fc10" // Content SID for the List Picker template
+        );
+        console.log("List Picker message sent successfully");
+      }
+    } catch (sendError) {
+      console.error("Error sending List Picker message:", sendError);
+      await sendMessage(
+        From,
+        "⚠️ Error displaying task list. Please try again."
+      );
+      return;
+    }
+
+    // NEW: Reschedule the reminder using the /update-reminder endpoint
+    try {
+      // Clear any existing reminder for this task
+      const existingJob = cronJobs.get(taskId);
+      if (existingJob?.timeoutId) {
+        clearTimeout(existingJob.timeoutId);
+        console.log(`Cleared existing timeout for task ${taskId}`);
+      }
+      if (existingJob?.cron) {
+        existingJob.cron.stop();
+        console.log(`Stopped existing cron job for task ${taskId}`);
+      }
+      cronJobs.delete(taskId);
+
+      // Delete existing reminder from Supabase
+      await supabase.from("reminders").delete().eq("taskId", taskId);
+
+      // Prepare data for the /update-reminder endpoint
+      const reminderData = {
+        reminder_type: updatedTask.reminder_type || "recurring", // Default to recurring if not specified
+        reminder_frequency: updatedTask.reminder_frequency || null,
+        taskId: taskId,
+        dueDateTime: normalizedDeadline, // Updated due date and time
+        reminderDateTime: updatedTask.reminderDateTime || null, // Use existing reminderDateTime for one-time reminders
+      };
+
+      // Call the /update-reminder endpoint
+      const response = await fetch("http://localhost:8000/update-reminder", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(reminderData),
+      });
+
+      const result = await response.json();
+      console.log(`Reminder rescheduled for task ${taskId}:`, result);
+
+      // Update user session to reflect that the task is back in a reminder state
+      userSessions[From] = {
+        ...userSessions[From],
+        step: 0, // Reset step to allow further interactions
+      };
+    } catch (error) {
+      console.error("Error rescheduling reminder:", error);
+      await sendMessage(
+        From,
+        "⚠️ Failed to reschedule reminder. Please try again."
+      );
+    }
+
+    // Clean up session
+    delete userSessions[From];
+
+    return;
   } else {
     const prompt = `
 You are a helpful task manager assistant. Respond with a formal tone and
@@ -882,14 +890,12 @@ Thank you for providing the task details! Here's a quick summary:
                 };
 
                 taskList.forEach((task, index) => {
-                  console.log("inside for each =======>>>>>", task);
-
-                  templateData[`${index + 4}`] = `Due Date: ${formatDueDate(
+                  templateData[`${index + 4}`] = `${formatDueDate(
                     task.due_date
                   )}`;
                   templateData[
                     `${index + 4}_description`
-                  ] = `Task: ${task.task_details}`;
+                  ] = `${task.task_details}`;
                   templateData[`task_${index}`] = task.taskId;
                 });
                 console.log(
@@ -907,7 +913,7 @@ Thank you for providing the task details! Here's a quick summary:
                       null, // No body for template
                       true, // isTemplate flag
                       templateData,
-                      "HX143dece1a4b71701e48172ecf1028544" // Content SID for the List Picker template
+                      "HX143dece1a4b71701e48172ecf1028544"
                     );
                     console.log("List Picker message sent successfully");
                   } else if (taskList.length === 2) {
@@ -1241,7 +1247,7 @@ async function extractTextFromImage(
               image_url: imageUrl,
             },
           },
-          version: "^2.8",
+          version: "^2.10",
         },
         {
           headers: {
@@ -1492,12 +1498,12 @@ async function makeTwilioRequest() {
       const showTaskTemplateData = {};
 
       showAllTaskList.forEach((task, index) => {
-        showTaskTemplateData[`${index + 4}`] = `Due Date: ${formatDueDate(
+        showTaskTemplateData[`${index + 4}`] = `${formatDueDate(
           task.due_date
         )}`;
         showTaskTemplateData[
           `${index + 4}_description`
-        ] = `Task: ${task.task_details}`;
+        ] = `${task.task_details}`;
         showTaskTemplateData[`task_${index}`] = task.taskId;
       });
 
@@ -1608,7 +1614,7 @@ async function makeTwilioRequest() {
       // Parse ButtonPayload (format: yes_<taskId> or no_<taskId>)
       const [response, taskId] = buttonPayload.split("_");
 
-          const { data: allGroupedData, newError } = await supabase
+      const { data: allGroupedData, newError } = await supabase
         .from("grouped_tasks")
         .select("name, phone, tasks, employerNumber");
 
@@ -1619,7 +1625,12 @@ async function makeTwilioRequest() {
       console.log("response to buttons ======>🕯🕯🕯🕯🕯🕯🕯", response, taskId);
 
       if (response === "updatedeadline") {
-        console.log("im inside this line taskId, sessions, allMatchedRow----> 🔋🔋🔋🔋🔋🔋🔋🔋🔋🔋🔋🔋🔋🔋🔋", taskId, sessions, allMatchedRow);
+        console.log(
+          "im inside this line taskId, sessions, allMatchedRow----> 🔋🔋🔋🔋🔋🔋🔋🔋🔋🔋🔋🔋🔋🔋🔋",
+          taskId,
+          sessions,
+          allMatchedRow
+        );
 
         sendMessage(
           From,
@@ -1630,11 +1641,11 @@ async function makeTwilioRequest() {
         );
 
         userSessions[From] = {
-          step : 8,
+          step: 8,
           taskId,
-          number: allMatchedRow.phone
-        }
-        return
+          number: allMatchedRow.phone,
+        };
+        return;
       }
 
       if (response === "managetaskcompleted") {
@@ -1713,12 +1724,12 @@ async function makeTwilioRequest() {
         updatedFilteredTasks.forEach((task, index) => {
           console.log("inside for each =======>>>>>", task);
 
-          completed_templateData[`${index + 4}`] = `Due Date: ${formatDueDate(
+          completed_templateData[`${index + 4}`] = `${formatDueDate(
             task.due_date
           )}`;
           completed_templateData[
             `${index + 4}_description`
-          ] = `Task: ${task.task_details}`;
+          ] = `${task.task_details}`;
           completed_templateData[`task_${index}`] = task.taskId;
         });
 
@@ -1920,12 +1931,12 @@ async function makeTwilioRequest() {
         updatedFilteredTasks.forEach((task, index) => {
           console.log("inside for each =======>>>>>", task);
 
-          completed_templateData[`${index + 4}`] = `Due Date: ${formatDueDate(
+          completed_templateData[`${index + 4}`] = `${formatDueDate(
             task.due_date
           )}`;
           completed_templateData[
             `${index + 4}_description`
-          ] = `Task: ${task.task_details}`;
+          ] = `${task.task_details}`;
           completed_templateData[`task_${index}`] = task.taskId;
         });
 
@@ -2115,12 +2126,12 @@ async function makeTwilioRequest() {
         filteredTasks.forEach((task, index) => {
           console.log("inside for each =======>>>>>", task);
 
-          delete_templateData[`${index + 4}`] = `Due Date: ${formatDueDate(
+          delete_templateData[`${index + 4}`] = `${formatDueDate(
             task.due_date
           )}`;
           delete_templateData[
             `${index + 4}_description`
-          ] = `Task: ${task.task_details}`;
+          ] = `${task.task_details}`;
           delete_templateData[`task_${index}`] = task.taskId;
         });
 
@@ -3725,6 +3736,10 @@ app.post("/update-reminder", async (req, res) => {
             .eq("name", matchedRowSpecial.name.toUpperCase())
             .eq("employerNumber", matchedRowSpecial.employerNumber);
 
+          await supabase.from("reminders").delete().eq("taskId", taskId);
+          console.log(
+            `Deleted reminder for task ${taskId} from Supabase after special 15-minute message`
+          );
           console.log(
             `Stopped further reminders for task ${taskId} after special 15-minute message`
           );
@@ -3858,6 +3873,11 @@ app.post("/update-reminder", async (req, res) => {
             .update({ tasks: updatedTasks })
             .eq("name", matchedRowSpecial.name.toUpperCase())
             .eq("employerNumber", matchedRowSpecial.employerNumber);
+
+          await supabase.from("reminders").delete().eq("taskId", taskId);
+          console.log(
+            `Deleted reminder for task ${taskId} from Supabase after special 15-minute message`
+          );
 
           console.log(
             `Stopped further reminders for task ${taskId} after special 15-minute message`
@@ -3997,6 +4017,11 @@ app.post("/update-reminder", async (req, res) => {
             .eq("name", matchedRowSpecial.name.toUpperCase())
             .eq("employerNumber", matchedRowSpecial.employerNumber);
 
+          await supabase.from("reminders").delete().eq("taskId", taskId);
+          console.log(
+            `Deleted reminder for task ${taskId} from Supabase after special 15-minute message`
+          );
+
           console.log(
             `Stopped further reminders for task ${taskId} after special 15-minute message`
           );
@@ -4021,31 +4046,6 @@ app.post("/update-reminder", async (req, res) => {
       console.log("Unsupported frequency unit:", unit);
       return res.status(400).json({ message: "Unsupported frequency unit" });
     }
-
-    // console.log(`Cron expression for task==> 1 ${taskId}: ${cronExpression}`);
-
-    // setTimeout(async () => {
-    //   await sendReminder();
-
-    //   // Schedule recurring reminders in Asia/Kolkata
-    //   const cronJob = cron.schedule(cronExpression, sendReminder, {
-    //     timezone: "Asia/Kolkata", // Explicitly set to IST
-    //   });
-    //   cronJobs.set(taskId, { cron: cronJob, frequency: reminder_frequency });
-    //   console.log(
-    //     `Scheduled recurring reminders for task ${taskId} with cron ${cronExpression} starting after first reminder at ${firstReminderTime.format(
-    //       "YYYY-MM-DD HH:mm:ss"
-    //     )} IST`
-    //   );
-    // }, delay);
-
-    // cronJobs.set(taskId, { type: "recurring", frequency: reminder_frequency });
-    // console.log(
-    //   `Scheduled first reminder for task ${taskId} at ${firstReminderTime.format(
-    //     "YYYY-MM-DD HH:mm:ss"
-    //   )} IST with frequency ${reminder_frequency}`
-    // );
-    // return res.status(200).json({ message: "Recurring reminder scheduled" });
   }
 });
 
