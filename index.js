@@ -15,6 +15,7 @@ const MessagingResponse = require("twilio").twiml.MessagingResponse;
 const chrono = require("chrono-node");
 const tinyurl = require("tinyurl");
 const path = require("path"); // NEW: Added path module import
+const { performance } = require("perf_hooks");
 
 const app = express();
 const port = process.env.PORT || 8000;
@@ -55,8 +56,17 @@ let currentTime = "";
 
 const sessions = {};
 
+function truncateString(str) {
+  if (typeof str !== "string") {
+    return str;
+  }
+  return str.length > 65 ? str.slice(0, 65) + "..." : str;
+}
+
 function formatDueDate(dueDateTime) {
-  const date = new Date(dueDateTime);
+  console.log("dueDateTime--->>", dueDateTime);
+
+  const date = moment(dueDateTime, "DD-MM-YYYY HH:mm").toDate();
 
   const day = date.getDate();
   const monthIndex = date.getMonth();
@@ -95,6 +105,9 @@ function formatDueDate(dueDateTime) {
   const formattedDate = `${getOrdinalSuffix(day)} ${
     monthNames[monthIndex]
   } ${year}`;
+
+  console.log("formattedDate--->>", formattedDate);
+
   return formattedDate;
 }
 
@@ -134,7 +147,7 @@ const getCurrentDate = () => {
   const minutes = String(now.get("minute")).padStart(2, "0");
 
   // console.log(`${year}-${month}-${day} ${hours}:${minutes}`);
-  return `${year}-${month}-${day} ${hours}:${minutes}`;
+  return `${day}-${month}-${year} ${hours}:${minutes}`;
 };
 
 async function getRefreshToken(userNumber) {
@@ -180,6 +193,22 @@ async function main() {
 }
 
 main();
+
+async function getAssigneeName() {
+  const { data, error } = await supabase
+    .from("grouped_tasks")
+    .select("name", { distinct: true });
+
+  if (error) {
+    console.error("Error fetching names:", error);
+    return;
+  }
+
+  const uniqueNames = [...new Set(data.map((item) => item.name))];
+
+  // console.log("Unique assignee names:", uniqueNames);
+  return uniqueNames;
+}
 
 app.get("/refresh", async (req, res) => {
   console.log("Refreshing tasks from Supabase...");
@@ -355,7 +384,9 @@ async function handleUserInput(userMessage, From) {
 
     // Validate input format: YYYY-MM-DD HH:MM
     const deadlineInput = userMessage.trim();
-const isValidFormat = /^\d{4}-\d{2}-\d{2} \d{1,2}:\d{2}$/.test(deadlineInput);
+    const isValidFormat = /^\d{2}-\d{2}-\d{4} \d{1,2}:\d{2}$/.test(
+      deadlineInput
+    );
 
     if (!isValidFormat) {
       await sendMessage(
@@ -366,12 +397,12 @@ const isValidFormat = /^\d{4}-\d{2}-\d{2} \d{1,2}:\d{2}$/.test(deadlineInput);
     }
 
     // ⏱ Normalize to HH:mm format
-const [datePart, timePart] = deadlineInput.split(" ");
-let [hour, minute] = timePart.split(":");
+    const [datePart, timePart] = deadlineInput.split(" ");
+    let [hour, minute] = timePart.split(":");
 
-if (hour.length === 1) hour = "0" + hour;
+    if (hour.length === 1) hour = "0" + hour;
 
-const normalizedDeadline = `${datePart} ${hour}:${minute}`;
+    const normalizedDeadline = `${datePart} ${hour}:${minute}`;
 
     // Proceed to update the deadline
     const { data: groupedData, error: fetchError } = await supabase
@@ -456,10 +487,10 @@ const normalizedDeadline = `${datePart} ${hour}:${minute}`;
     newtaskList.forEach((task, index) => {
       console.log("inside for each =======>>>>>", task);
 
-      newTemplateMsg[`${index + 4}`] = `${formatDueDate(
-        task.due_date
+      newTemplateMsg[`${index + 4}`] = `${formatDueDate(task.due_date)}`;
+      newTemplateMsg[`${index + 4}_description`] = `${truncateString(
+        task.task_details
       )}`;
-      newTemplateMsg[`${index + 4}_description`] = `${task.task_details}`;
       newTemplateMsg[`task_${index}`] = task.taskId;
     });
 
@@ -640,99 +671,105 @@ const normalizedDeadline = `${datePart} ${hour}:${minute}`;
 
     return;
   } else {
-    const prompt = `
-You are a helpful task manager assistant. Respond with a formal tone and
-a step-by-step format.
-Your goal is to guide the user through task assignment:
-- Ask for task details (task, assignee, due date, time, and reminder preference).
-- The reminder preference can be either:
-  - A recurring reminder (e.g., "every 3 mins", "every 2 hours", "every 1 day").
-  - A one-time reminder (e.g., "one-time on 20th May at 5PM").
-  - If a user provides reminder like "every 8 mins", "every 2 hrs" then consider the reminder as a recurring one
-- For one-time reminders, explicitly ask for the reminder date and time (e.g., "When would you like the one-time reminder to be sent? For example, '20th May at 5PM'.").  
+    const allAssigneeNames = await getAssigneeName();
+
+    const prompt = `You are a helpful task manager assistant. Respond with a formal tone and a step-by-step format. Your goal is to guide the user through task assignment by collecting all required details: task description, assignee, due date, due time, and reminder preference. Do not assign the task until all details are provided and unambiguous.
+
+**Task Assignment Rules**:
+- Required details: task description, assignee, due date (DD-MM-YYYY), due time (HH:mm), and reminder preference.
+- Reminder preference can be:
+  - Recurring (e.g., "every 3 mins", "every 2 hours", "every 1 day").
+  - One-time (e.g., "one-time on 20th May at 5PM").
+- If a user provides a reminder like "every 8 mins" or "every 2 hrs", treat it as recurring.
+- For one-time reminders, explicitly ask for the reminder date and time (e.g., "Please specify the date and time for the one-time reminder, e.g., '20th May at 5PM'.").
+- For recurring reminders, ensure a valid frequency is provided (e.g., "every 5 mins"). If only "recurring" is specified, prompt for the frequency (e.g., "Please specify the frequency for the recurring reminder, e.g., 'every 5 mins'.").
 - Respond to yes/no inputs appropriately.
-- Follow up if any information is incomplete in **bullet points** by using "•" rather than in paragraph.
-- Keep the respone concise and structured.
-- If the user's message contains **all required details** (task description, assignee, due date, due time, and reminder preference) and they are unambiguous, **immediately assign the task** without sending a summary or asking for confirmation.
-- **Do not** proceed with any of the missing details (like reminder, due time etc), instead ask for that missing detail.
+- If any detail is missing or ambiguous, prompt the user with a bulleted list (using "•") specifying only the missing details.
+- Do not proceed with task assignment if any required detail is missing, and do not assume or assign 'null' for missing fields.
+- If all required details are provided in a single message and are unambiguous, assign the task immediately without asking for confirmation or sending a summary.
 
 **Task Description Correction**:
-- Automatically detect and correct any typos, spelling errors, or grammatical issues in the task description.
+- Automatically detect and correct typos, spelling errors, or grammatical issues in the task description.
 - Use natural language understanding to infer the intended meaning and correct to standard English.
 - Ensure the corrected task is a complete, professional, and grammatically correct sentence.
 - Example: If the user provides "snd remnder everydy for aprovl", correct it to "Send reminder every day for approval".
 
 **Assignee Detection**:
 - Interpret the assignee from phrases like "tell [name] to [task]", "ask [name] to [task]", or explicit mentions like "assignee is [name]".
-- The assignee must be a proper name (e.g., "Astik", "John Doe", Anandini).
-- **Do not** assume words like "this", "assigning", or other non-name terms as the assignee.
-- If the assignee is not explicitly provided or is ambiguous, prompt the user with: "Please specify the assignee for the task."
-- Example: For input like "assigning this task to test completion feature", recognize that no valid assignee is provided and ask for clarification
+- The assignee must be a proper name (e.g., "Astik", "John Doe", "Anandini").
+- Do not assume non-name terms (e.g., "this", "assigning") as the assignee.
+- If the assignee is missing or ambiguous, prompt: "Please specify the assignee for the task."
 
-EXAMPLES: 
+**Assignee Matching Rules**:
+- The assignee will always be one of the following names: ${allAssigneeNames.join(
+      ", "
+    )}.
+- If the detected assignee name from the transcription is a variant, nickname, or has a spelling difference, map it to the closest match from the above list.
+- Always choose the closest match, even if the input name is slightly misspelled or transliterated from Hindi.
 
-- If a user is asked about due date, due time, and reminder preference, and they send only due date and due time, ask for reminder preference.
-- If a user is asked about due date, due time and reminder frequncy, and user sends only due date and due time then it should again ask for reminder frequency and should not ignore that.
-- If a user selects a one-time reminder but doesn't provide a reminder date and time, ask for the reminder date and time explicitly.
-- If a user is asked about task, assignee and due date but user only only task and due date then it should again ask the user asking about the assignee since they did not sent that.
-- For inputs like "tell Astik to test twilio", interpret assignee as "Astik" and task as "Test Twilio".
+**Due Date Handling**:
+- If the user provides a day and month (e.g., "28th Feb" or "28 February"), assume the current year (2025) and format as "DD-MM-YYYY" (e.g., "28-02-2025").
+- If the user provides a full date (e.g., "28th Feb 2025"), return it as is in "DD-MM-YYYY" format.
+- For dynamic terms:
+  - Current date is ${todayDate}
+  - "today": Use the current date which is ${todayDate} (e.g., if today is April 5, 2025, it should return "05-04-2025").
+  - "tomorrow": Use the next day’s date (e.g., "31-07-2025") (e.g., if today is April 5, 2025, "tomorrow" should be "06-04-2025").
+  - "next week": Use the same day in the following week (e.g., if today is April 5, 2025, "next week" would be April 12, 2025).
+  - "in X days": Calculate the date accordingly (e.g., "in 3 days" from 30-07-2025 is "02-08-2025").
+  - "next month": Use the same day in the next month (e.g., if today is April 5, 2025, "next month" should become "05-05-2025").
+  - "tonight Xpm" or "tonight at Xpm": Treat as today's date (${todayDate}) and the specified time (e.g., "tonight at 8pm" is "30-07-2025 20:00").
+  - If "tonight" is provided without a time, prompt for the time.
 
-For Reminders:
-- For one-time reminders, set reminder_type to "one-time", reminder_frequency to null, and reminderDateTime to the user-specified reminder date and time in "YYYY-MM-DD HH:mm" format.
-- For recurring reminders, set reminderDateTime to null.
-- Do **not** assume the reminder time is tied to the due date for one-time reminders; it should be based on user input (e.g., "20th May at 5PM").
+**Due Time Handling**:
+- Current time is ${currentTime}.
+- Convert AM/PM times to 24-hour format (e.g., "6 PM" to "18:00", "6 AM" to "06:00").
+- For "next X hours" or "in X minutes", calculate from the current time (e.g., if current time is 14:42, "next 5 hours" is "19:42").
+- Always output time in "HH:mm" format.
+- If due time is missing, prompt: "Please specify the due time for the task."
 
-After having all the details you can send the summary of the response so that user can have a look at it.
+**Reminder Handling**:
+- For recurring reminders:
+  - Set 'reminder_type' to "recurring".
+  - Set 'reminder_frequency' to the user-specified frequency (e.g., "every 5 mins").
+  - Set 'reminderDateTime' to null.
+  - If only "recurring" is provided, prompt for the frequency.
+- For one-time reminders:
+  - Set 'reminder_type' to "one-time".
+  - Set 'reminder_frequency' to null.
+  - Set 'reminderDateTime' to the user-specified date and time in "DD-MM-YYYY HH:mm" format.
+  - If the reminder date or time is missing (e.g., user only says "one-time" or provides an incomplete date/time), prompt: "Please specify the date and time for the one-time reminder, e.g., '20th May at 5PM'."
+  - Do not proceed with task assignment if the reminder date and time are not fully specified for one-time reminders.
+  - If the reminder date/time is missing, prompt for it.
+- Do not assume the reminder time is tied to the due date for one-time reminders unless explicitly stated by the user.
 
-For due dates:
-- If the user provides a day and month (e.g., "28th Feb" or "28 February"), convert it into the current year (e.g., "2025-02-28").
-- If the user provides a full date (e.g., "28th Feb 2025"), return it as is.
-- If no year is provided, assume the current year which is 2025 and return the date in the format YYYY-MM-DD.
+**Conversation History**:
+- Conversation history: ${JSON.stringify(conversationHistory)}
+- User input: ${userMessage}
+- Combine the current user input with the conversation history to extract all required task details.
+- Treat multiple messages as part of a single conversation thread.
+- Check the full conversation history for missing details before prompting the user.
+- Do not ask for a detail if it is already clearly provided in earlier messages.
 
-
-For dynamic date terms:
-- Today's date is ${todayDate}
-- If the user says "today," convert that into **the current date** (e.g., if today is April 5, 2025, it should return "2025-04-05").
-- If the user says "tomorrow," convert that into **the next day’s date** (e.g., if today is April 5, 2025, "tomorrow" should be "2025-04-06").
-- If the user says "next week," calculate the date of the same day in the following week (e.g., if today is April 5, 2025, "next week" would be April 12, 2025).
-- If the user provides a phrase like "in X days," calculate the due date accordingly (e.g., "in 3 days" should become "2025-04-08").
-- If the user provides terms like "next month," calculate the due date for the same day of the next month (e.g., if today is April 5, 2025, "next month" should become "2025-05-05").
-- If the user says a phrase like "tonight 8pm" or "tonight at 8pm", treat it as a combination of today's date (${todayDate}) and the time (e.g., "20:00"). Do not ask again for due date or due time.
-- If no specific time is provided with "tonight", prompt for a time.
-
-For due times:
-- Current time is ${currentTime}
-- If the user provides a time in "AM/PM" format (e.g., "6 PM" or "6 AM"), convert it into the 24-hour format:
-  - "6 AM" becomes "06:00"
-  - "6 PM" becomes "18:00"
-- Ensure the output time is always in the 24-hour format (HH:mm).
-- If the user says "next X hours" or "in X minutes," calculate the **current time** accordingly(e.g., if current time is 5:40 pm then "next 5 hours" will be 10:40 pm).
-
-Conversation history: ${JSON.stringify(conversationHistory)}
-User input: ${userMessage}
-
-The "Conversation history" contains previous user inputs and must be used to extract missing task information.
-- Always combine "User input" with "Conversation history" to determine if all required task details are available.
-- Treat multiple user messages as part of a single conversation thread.
-- Look through the full conversation history to fill in missing fields before prompting the user again.
-- Do NOT ask for a detail if it is already clearly present in earlier messages.
-
-IMPORTANT:
-- Once all details are collected, return **ONLY** with a JSON object which will be used for backend purpose.
-- Do **not** include any extra text before or after the JSON.
-- This is only for backend procesing so do **NOT** send this JSON format to user
-- The JSON format should be:
+**Task Assignment**:
+- Once all required details (task, assignee, due date, due time, reminder type, and reminder frequency or date/time) are collected, return **only** a JSON object for backend processing.
+- Do not include any extra text before or after the JSON.
+- Do not send a summary or ask for confirmation before returning the JSON.
+- The JSON format must be:
 {
-"task": "<task_name>",
-"assignee": "<assignee_name>",
-"dueDate": "<YYYY-MM-DD>",
-"dueTime": "<HH:mm>",
-"reminder_type": "<recurring|one-time>",
-"reminder_frequency": "<reminder_frequency or null for one-time>",
-"reminderDateTime": "<YYYY-MM-DD HH:mm or null for recurring>"
+  "task": "<task_name>",
+  "assignee": "<assignee_name>",
+  "dueDate": "<DD-MM-YYYY>",
+  "dueTime": "<HH:mm>",
+  "reminder_type": "<recurring|one-time>",
+  "reminder_frequency": "<reminder_frequency or null for one-time>",
+  "reminderDateTime": "<DD-MM-YYYY HH:mm or null for recurring>"
 }
-`;
-    console.log("we are here===> 3");
+- Do not assign the task or return the JSON if any required detail is missing.`;
+
+    // console.log(
+    //   "we are here===> 3 AND WE ARE LOGGING THE PROMPT HERE:::::::::::::::::",
+    //   prompt
+    // );
     try {
       const response = await openai.chat.completions.create({
         model: "gpt-4-turbo",
@@ -741,19 +778,19 @@ IMPORTANT:
       console.log("we are here===> 4");
       const botReply = response.choices[0].message.content;
       session.conversationHistory = conversationHistory;
-      console.log("we are here===> 5", botReply);
+      // console.log("we are here===> 5", botReply);
 
-      console.log(
-        "🤟🤟🤟🤟🤟session.conversation history------->🤟🤟🤟🤟🤟",
-        conversationHistory
-      );
+      // console.log(
+      //   "🤟🤟🤟🤟🤟session.conversation history------->🤟🤟🤟🤟🤟",
+      //   conversationHistory
+      // );
 
       if (botReply[0] === "{") {
         const taskDetails = JSON.parse(botReply);
 
         const assigneeName = taskDetails.assignee.trim();
 
-        console.log("assigneeName====>", assigneeName);
+        // console.log("assigneeName====>", assigneeName);
 
         const { data: matchingAssignees, error } = await supabase
           .from("grouped_tasks")
@@ -770,9 +807,9 @@ IMPORTANT:
           return;
         }
 
-        console.log("FROM NUMBER===>", From);
+        // console.log("FROM NUMBER===>", From);
 
-        console.log("matchingAssignees====>", matchingAssignees);
+        // console.log("matchingAssignees====>", matchingAssignees);
 
         if (matchingAssignees.length > 1) {
           let message = `There are multiple people with the name "${assigneeName}". Please choose one:\n`;
@@ -814,11 +851,17 @@ Thank you for providing the task details! Here's a quick summary:
               person.name.toLowerCase() === taskData.assignee.toLowerCase() &&
               person.employerNumber === From
           );
-          console.log("assignedPerson--->", assignedPerson);
-          console.log("taskData", taskData);
+          // console.log("assignedPerson--->", assignedPerson);
+          // console.log("taskData", taskData);
 
           if (assignedPerson) {
             let dueDateTime = `${taskData.dueDate} ${taskData.dueTime}`;
+
+            // console.log(
+            //   "im about to assign a new task--------->👓👓👓👓👓👓👓👓👓👓",
+            //   session
+            // );
+
             if (
               taskData.task &&
               taskData.assignee &&
@@ -833,10 +876,12 @@ Thank you for providing the task details! Here's a quick summary:
                 reminder: "true",
                 reminder_frequency: taskData.reminder_frequency,
                 reason: null,
-                started_at: session.started_at || getCurrentDate(),
+                started_at: session.fromImage
+                  ? session.started_at
+                  : getCurrentDate(),
                 reminder_type: taskData.reminder_type || "recurring", // Default to recurring if not specified
                 reminderDateTime: taskData.reminderDateTime || null, // Store reminder date and time
-                notes: session.notes || null, // Include notes from session
+                notes: session.fromImage ? session.notes : null, // Include notes from session
               };
 
               const { data: existingData, error: fetchError } = await supabase
@@ -893,16 +938,16 @@ Thank you for providing the task details! Here's a quick summary:
                   templateData[`${index + 4}`] = `${formatDueDate(
                     task.due_date
                   )}`;
-                  templateData[
-                    `${index + 4}_description`
-                  ] = `${task.task_details}`;
+                  templateData[`${index + 4}_description`] = `${truncateString(
+                    task.task_details
+                  )}`;
                   templateData[`task_${index}`] = task.taskId;
                 });
-                console.log(
-                  "inside handleUserInput taskList---->>>>",
-                  taskList
-                );
-                console.log("templateData:::::::::::::", templateData);
+                // console.log(
+                //   "inside handleUserInput taskList---->>>>",
+                //   taskList
+                // );
+                // console.log("templateData:::::::::::::", templateData);
 
                 try {
                   if (taskList.length === 1) {
@@ -1098,7 +1143,7 @@ async function sendMessage(
   console.log("Sending message to:", to);
   console.log("Message:", message);
 
-  console.log("isTemplate-->", isTemplate, "templateData-->", templateData);
+  // console.log("isTemplate-->", isTemplate, "templateData-->", templateData);
 
   try {
     const messageOptions = {
@@ -1228,67 +1273,54 @@ async function uploadToSupabase(filePath, fileName) {
   }
 }
 
-async function extractTextFromImage(
-  imageUrl,
-  maxRetries = 3,
-  retryDelay = 1000
-) {
-  console.log("inside extractTextFromImage func");
-  let attempts = 0;
+async function extractTextFromImage(filePath) {
+  console.log(
+    "inside extractTextFromImage (OpenAI Vision) - local file",
+    filePath
+  );
 
-  while (attempts < maxRetries) {
-    try {
-      const response = await axios.post(
-        "https://app.wordware.ai/api/released-app/dedd9680-4a3b-4eb2-a3bc-fface48c4322/run",
+  const startOCR = performance.now();
+
+  try {
+    const fileBuffer = fs.readFileSync(filePath, {
+      encoding: "base64",
+    });
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4.1-mini",
+      response_format: {type: "json_object"},
+      messages: [
         {
-          inputs: {
-            new_input_1: {
-              type: "image",
-              image_url: imageUrl,
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: 'Have a look at the image and extract only Order Date, delivery date, customer name (Arpit in this image), customer number, payment mode, order id and the name which is there at the extreme bottom right corner(Kishan in this image), the bakery location in short (like Sec-18 Udyog Vihar, Gurugram in this case, not full address) and extract the context from the image and convert it in the form of task for instance (Prepare the pineapple cake, something like that) and then finally return it in json format. Make sure to return only the JSON and nothing extra also for the task make sure to return a **single combined sentence** describing the overall order (e.g., the types of cake to prepare, flavors, shapes, sizes, and any message to be written on it (like Jay in this case), and make sure to use the key as, name which will be for customer_name, phone which will be for customer_number which is "919311022224" (make sure to add 91 before customer number), employerNumber which will be "whatsapp:+918013416XXX", userId which will be "c20d5529-7afc-400a-83fb-84989f5a03ee" and tasks which will be an array that will contain started_at which will be order_date, due_date which will be delivery_date, task_details which will be the task, and a notes object also, make sure to put the details like payment_mode, order_id, handled_by, bakery_location inside a notes object also for the delivery date and order date make sure to format it as DD-MM-YYY HH:M A',
             },
-          },
-          version: "^2.10",
+            {
+              type: "image_url",
+              image_url: {
+                url: `data:image/jpeg;base64,${fileBuffer}`,
+                detail: "low",
+              },
+            },
+          ],
         },
-        {
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${process.env.WORDWARE_API_KEY_EXTRACT}`,
-          },
-        }
-      );
-      const newGen = await extractNewGeneration(response.data);
-      if (newGen) {
-        return newGen; // Success, return the extracted text
-      } else {
-        attempts++;
-        console.log(
-          `Attempt ${attempts} failed, extractedText is null. Retrying...`
-        );
-        if (attempts < maxRetries) {
-          await new Promise((resolve) => setTimeout(resolve, retryDelay)); // Wait before retrying
-        }
-      }
-    } catch (error) {
-      console.error(
-        `Error extracting text from image (Attempt ${attempts + 1}):`,
-        error.message
-      );
-      if (error.response) {
-        console.error(
-          "Wordware error details:",
-          JSON.stringify(error.response.data, null, 2)
-        );
-      }
-      attempts++;
-      if (attempts < maxRetries) {
-        console.log(`Retrying after error... Attempt ${attempts + 1}`);
-        await new Promise((resolve) => setTimeout(resolve, retryDelay)); // Wait before retrying
-      }
-    }
-  }
+      ],
+    });
 
-  console.error(`Failed to extract text after ${maxRetries} attempts.`);
-  return null; // Return null if all retries fail
+    const extractedText = response.choices[0].message.content;
+
+    // console.log("response and extractedText", response, extractedText);
+
+    const endOCR = performance.now();
+    console.log(`⏱ OCR extraction took ${(endOCR - startOCR).toFixed(2)} ms`);
+
+    return extractedText;
+  } catch (error) {
+    console.error("Error in OpenAI Vision OCR:", error);
+    return null;
+  }
 }
 
 function extractNewGeneration(rawResponse) {
@@ -1317,7 +1349,7 @@ function extractNewGeneration(rawResponse) {
 }
 
 async function insertBakeryOrder(data, From) {
-  console.log("data inside supabase insert function---> 1", data);
+  // console.log("data inside supabase insert function---> 1", data);
   if (From === "whatsapp:+918013356481") {
     data.userId = "253d8af9-aa41-4249-8d8e-e85acd464650";
     data.employerNumber = "whatsapp:+918013356481";
@@ -1328,7 +1360,7 @@ async function insertBakeryOrder(data, From) {
     data.userId = "ec579488-8a1c-4a72-8e0d-8fc68c4622b6";
     data.employerNumber = "whatsapp:+917980018498";
   }
-  console.log("data inside supabase insert function---> 2", data);
+  // console.log("data inside supabase insert function---> 2", data);
 
   try {
     // Step 1: Check for existing record
@@ -1357,6 +1389,12 @@ async function insertBakeryOrder(data, From) {
   }
 }
 // TEXT EXTRACTION FROM THE IMAGE (BAKERY RECEIPT CODE) "ENDS HERE"
+
+const stepTimings = {};
+
+const markStep = (label) => {
+  stepTimings[label] = performance.now();
+};
 
 async function makeTwilioRequest() {
   app.post("/whatsapp", async (req, res) => {
@@ -1501,9 +1539,9 @@ async function makeTwilioRequest() {
         showTaskTemplateData[`${index + 4}`] = `${formatDueDate(
           task.due_date
         )}`;
-        showTaskTemplateData[
-          `${index + 4}_description`
-        ] = `${task.task_details}`;
+        showTaskTemplateData[`${index + 4}_description`] = `${truncateString(
+          task.task_details
+        )}`;
         showTaskTemplateData[`task_${index}`] = task.taskId;
       });
 
@@ -1635,8 +1673,8 @@ async function makeTwilioRequest() {
         sendMessage(
           From,
           `📅 Please provide the revised due date and time for this task.  
-🕒 *Format:* YYYY-MM-DD HH:MM  
-🧪 *Example:* 2025-07-23 14:47
+🕒 *Format:* DD-MM-YYYY HH:MM  
+🧪 *Example:* 30-07-2025 14:47
 `
         );
 
@@ -1729,7 +1767,7 @@ async function makeTwilioRequest() {
           )}`;
           completed_templateData[
             `${index + 4}_description`
-          ] = `${task.task_details}`;
+          ] = `${truncateString(task.task_details)}`;
           completed_templateData[`task_${index}`] = task.taskId;
         });
 
@@ -1936,7 +1974,7 @@ async function makeTwilioRequest() {
           )}`;
           completed_templateData[
             `${index + 4}_description`
-          ] = `${task.task_details}`;
+          ] = `${truncateString(task.task_details)}`;
           completed_templateData[`task_${index}`] = task.taskId;
         });
 
@@ -2129,9 +2167,9 @@ async function makeTwilioRequest() {
           delete_templateData[`${index + 4}`] = `${formatDueDate(
             task.due_date
           )}`;
-          delete_templateData[
-            `${index + 4}_description`
-          ] = `${task.task_details}`;
+          delete_templateData[`${index + 4}_description`] = `${truncateString(
+            task.task_details
+          )}`;
           delete_templateData[`task_${index}`] = task.taskId;
         });
 
@@ -2317,8 +2355,11 @@ async function makeTwilioRequest() {
     if (numMedia > 0 && mediaUrl && mediaType?.startsWith("image/")) {
       const twiml = new MessagingResponse();
       const startTime = Date.now();
+      const overallImageStart = performance.now();
 
       try {
+        markStep("overallStart");
+
         const fileName = `image_${Date.now()}.${mediaType.split("/")[1]}`;
         const filePath = path.join(__dirname, "Uploads", fileName);
 
@@ -2326,18 +2367,43 @@ async function makeTwilioRequest() {
         fs.mkdirSync(path.join(__dirname, "Uploads"), { recursive: true });
 
         // Download the image from Twilio
+        markStep("downloadStart");
+
         const downloadSuccess = await downloadImage(mediaUrl, filePath);
+
+        markStep("downloadEnd");
         console.log(
-          `Image download ${downloadSuccess ? "successful" : "failed"}`
+          `⏱ Download took ${(
+            stepTimings.downloadEnd - stepTimings.downloadStart
+          ).toFixed(2)} ms`
         );
 
         if (downloadSuccess) {
           // Upload to Supabase and get public URL
+          markStep("uploadStart");
+
           const supabaseUrl = await uploadToSupabase(filePath, fileName);
+
+          markStep("uploadEnd");
+          console.log(
+            `⏱ Upload took ${(
+              stepTimings.uploadEnd - stepTimings.uploadStart
+            ).toFixed(2)} ms`
+          );
+
           if (supabaseUrl) {
             console.log("inside supabaseURL condition--->");
-            const extractedText = await extractTextFromImage(supabaseUrl);
-            console.log("extractedText====>", extractedText);
+
+            markStep("extractStart");
+
+            const extractedText = await extractTextFromImage(filePath);
+            // console.log("extractedText====>", extractedText);
+            markStep("extractEnd");
+            console.log(
+              `⏱ OCR extraction took ${(
+                stepTimings.extractEnd - stepTimings.extractStart
+              ).toFixed(2)} ms`
+            );
 
             if (extractedText) {
               console.log("inside extractedText condition--->");
@@ -2346,15 +2412,23 @@ async function makeTwilioRequest() {
                   .replace(/```json\s*/i, "")
                   .replace(/```$/, "")
                   .trim();
-                console.log("cleaned json", cleanJson);
+                // console.log("cleaned json", cleanJson);
                 const parsed = JSON.parse(cleanJson);
-                console.log("parsed====> ", parsed);
+                // console.log("parsed====> ", parsed);
+
+                markStep("insertStart");
 
                 const success = await insertBakeryOrder(parsed, From);
 
                 console.log("success inside bakery receipt==>", success);
 
                 console.log("Order details extracted successfully:", success);
+                markStep("insertEnd");
+                console.log(
+                  `⏱ Insert step took ${(
+                    stepTimings.insertEnd - stepTimings.insertStart
+                  ).toFixed(2)} ms`
+                );
 
                 if (success) {
                   // Initialize session with extracted task details
@@ -2401,6 +2475,14 @@ async function makeTwilioRequest() {
                   console.log(
                     `Response sent successfully in ${Date.now() - startTime}ms`
                   );
+
+                  markStep("overallEnd");
+                  console.log(
+                    `⏱ Total image processing time: ${(
+                      stepTimings.overallEnd - stepTimings.overallStart
+                    ).toFixed(2)} ms`
+                  );
+
                   return;
                 } else {
                   sendMessage(From, "Error: Could not find assignee.");
@@ -2789,49 +2871,60 @@ When all details are collected, return **ONLY** a JSON object with the following
     if (mediaUrl && mediaType && mediaType.startsWith("audio")) {
       console.log(`Received a voice message from`);
       console.log(`Media URL: ${mediaUrl}`);
+      const startTranscription = performance.now();
 
       const transcription = await transcribeAudioDirectly(mediaUrl);
+      const endTranscription = performance.now();
+      console.log(
+        `⏱ Transcription time: ${(
+          endTranscription - startTranscription
+        ).toFixed(2)} ms`
+      );
 
       if (transcription) {
         userMessage = transcription;
       }
+      // const startWordware = performance.now();
 
-      const apiKey = process.env.WORDWARE_API_KEY;
-      const requestBody = {
-        inputs: {
-          your_text: userMessage,
-        },
-        version: "^2.0",
-      };
+      //     const apiKey = process.env.WORDWARE_API_KEY;
+      //     const requestBody = {
+      //       inputs: {
+      //         your_text: userMessage,
+      //       },
+      //       version: "^2.2",
+      //     };
 
-      const response = await axios.post(
-        "https://app.wordware.ai/api/released-app/8ab2f459-fee3-4aa1-9d8b-fc6454a347c3/run",
-        requestBody,
-        {
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      //     const response = await axios.post(
+      //       "https://app.wordware.ai/api/released-app/8ab2f459-fee3-4aa1-9d8b-fc6454a347c3/run",
+      //       requestBody,
+      //       {
+      //         headers: {
+      //           Authorization: `Bearer ${apiKey}`,
+      //           "Content-Type": "application/json",
+      //         },
+      //       }
+      //     );
 
-      console.log("res====?>", response.data);
+      //     console.log("res====?>", response.data);
 
-      const responseValue = response.data.trim().split("\n");
+      //       const endWordware = performance.now();
+      // console.log(`⏱ Wordware API time: ${(endWordware - startWordware).toFixed(2)} ms`);
 
-      let parsedChunks = responseValue.map((chunk) => JSON.parse(chunk));
+      //     const responseValue = response.data.trim().split("\n");
 
-      console.log(
-        "parsedChunks length",
-        parsedChunks[parsedChunks.length - 1].value.values.new_generation
-      );
+      //     let parsedChunks = responseValue.map((chunk) => JSON.parse(chunk));
 
-      const cleanText =
-        parsedChunks[parsedChunks.length - 1].value.values.new_generation;
+      //     console.log(
+      //       "parsedChunks length",
+      //       parsedChunks[parsedChunks.length - 1].value.values.new_generation
+      //     );
 
-      console.log("clean text====>", cleanText);
+      //     const cleanText =
+      //       parsedChunks[parsedChunks.length - 1].value.values.new_generation;
 
-      userMessage = cleanText;
+      //     console.log("clean text====>", cleanText);
+
+      // userMessage = cleanText;
     }
 
     // Respond with an HTTP 200 status
@@ -2848,8 +2941,15 @@ When all details are collected, return **ONLY** a JSON object with the following
         conversationHistory: [],
       };
     }
-    console.log(userMessage, From);
-    await handleUserInput(userMessage, From);
+
+    const startTaskAssignment = performance.now();
+
+    console.log(
+      "this messg will go after the transcription--------->",
+      userMessage,
+      From
+    );
+    await handleUserInput(userMessage, From, startTaskAssignment);
     res.end();
   });
 }
@@ -3520,7 +3620,7 @@ app.post("/update-reminder", async (req, res) => {
     const now = moment().tz("Asia/Kolkata");
     const reminderTime = moment.tz(
       reminderDateTime,
-      "YYYY-MM-DD HH:mm",
+      "DD-MM-YYYY HH:mm",
       "Asia/Kolkata"
     );
     // const reminderTimeWithOffset = reminderTime.clone().subtract(20, "minutes");
@@ -3529,14 +3629,14 @@ app.post("/update-reminder", async (req, res) => {
     await supabase.from("reminders").upsert({
       taskId,
       reminder_frequency: "once",
-      nextReminderTime: reminderTime.format("YYYY-MM-DD HH:mm:ss"),
+      nextReminderTime: reminderTime.format("DD-MM-YYYY HH:mm:ss"),
     });
 
     console.log(
       "taskId, reminder_frequency, nextReminderTime",
       taskId,
       reminder_frequency,
-      reminderTime.format("YYYY-MM-DD HH:mm:ss")
+      reminderTime.format("DD-MM-YYYY HH:mm:ss")
     );
 
     if (delay <= 0) {
@@ -3604,10 +3704,10 @@ app.post("/update-reminder", async (req, res) => {
     const firstReminderTime = now.clone().add(quantity, unit);
     const delay = firstReminderTime.diff(now);
 
-    console.log(`Now: ${now.format("YYYY-MM-DD HH:mm:ss")} IST`);
+    console.log(`Now: ${now.format("DD-MM-YYYY HH:mm:ss")} IST`);
     console.log(
       `First reminder time: ${firstReminderTime.format(
-        "YYYY-MM-DD HH:mm:ss"
+        "DD-MM-YYYY HH:mm:ss"
       )} IST`
     );
     console.log(`Delay: ${delay} ms`);
@@ -3630,14 +3730,14 @@ app.post("/update-reminder", async (req, res) => {
           .add(quantity, "minutes");
         console.log(
           `Scheduling next reminder for task ${taskId} at ${nextReminderTime.format(
-            "YYYY-MM-DD HH:mm:ss"
+            "DD-MM-YYYY HH:mm:ss"
           )} IST`
         );
         // Persist next reminder time
         await supabase.from("reminders").upsert({
           taskId,
           reminder_frequency,
-          nextReminderTime: nextReminderTime.format("YYYY-MM-DD HH:mm:ss"),
+          nextReminderTime: nextReminderTime.format("DD-MM-YYYY HH:mm:ss"),
         });
         const nextDelay = nextReminderTime.diff(moment().tz("Asia/Kolkata"));
         const timeoutId = setTimeout(scheduleReminder, nextDelay);
@@ -3658,7 +3758,7 @@ app.post("/update-reminder", async (req, res) => {
       });
       console.log(
         `Scheduled first reminder for task ${taskId} at ${firstReminderTime.format(
-          "YYYY-MM-DD HH:mm:ss"
+          "DD-MM-YYYY HH:mm:ss"
         )} IST with frequency ${reminder_frequency}`
       );
       // Persist initial reminder
@@ -3670,7 +3770,7 @@ app.post("/update-reminder", async (req, res) => {
 
       const dueTime = moment.tz(
         dueDateTime,
-        "YYYY-MM-DD HH:mm",
+        "DD-MM-YYYY HH:mm",
         "Asia/Kolkata"
       );
       const twoHoursBeforeDue = dueTime.clone().subtract(15, "minutes");
@@ -3747,7 +3847,7 @@ app.post("/update-reminder", async (req, res) => {
 
         console.log(
           `Scheduled 15-minute-before-due reminder for task ${taskId} at ${twoHoursBeforeDue.format(
-            "YYYY-MM-DD HH:mm:ss"
+            "DD-MM-YYYY HH:mm:ss"
           )} IST`
         );
       } else {
@@ -3758,7 +3858,7 @@ app.post("/update-reminder", async (req, res) => {
 
       const existingJob = cronJobs.get(taskId);
 
-      console.log("existingJob===============>", existingJob);
+      // console.log("existingJob===============>", existingJob);
 
       return res.status(200).json({ message: "Recurring reminder scheduled" });
     } else if (unit === "hours") {
@@ -3769,13 +3869,13 @@ app.post("/update-reminder", async (req, res) => {
           .add(quantity, "hours");
         console.log(
           `Scheduling next reminder for task ${taskId} at ${nextReminderTime.format(
-            "YYYY-MM-DD HH:mm:ss"
+            "DD-MM-YYYY HH:mm:ss"
           )} IST`
         );
         await supabase.from("reminders").upsert({
           taskId,
           reminder_frequency,
-          nextReminderTime: nextReminderTime.format("YYYY-MM-DD HH:mm:ss"),
+          nextReminderTime: nextReminderTime.format("DD-MM-YYYY HH:mm:ss"),
         });
         const nextDelay = nextReminderTime.diff(moment().tz("Asia/Kolkata"));
         const timeoutId = setTimeout(scheduleReminder, nextDelay);
@@ -3797,18 +3897,18 @@ app.post("/update-reminder", async (req, res) => {
       });
       console.log(
         `Scheduled first reminder for task ${taskId} at ${firstReminderTime.format(
-          "YYYY-MM-DD HH:mm:ss"
+          "DD-MM-YYYY HH:mm:ss"
         )} IST with frequency ${reminder_frequency}`
       );
       await supabase.from("reminders").upsert({
         taskId,
         reminder_frequency,
-        nextReminderTime: firstReminderTime.format("YYYY-MM-DD HH:mm:ss"),
+        nextReminderTime: firstReminderTime.format("DD-MM-YYYY HH:mm:ss"),
       });
 
       const dueTime = moment.tz(
         dueDateTime,
-        "YYYY-MM-DD HH:mm",
+        "DD-MM-YYYY HH:mm",
         "Asia/Kolkata"
       );
       const twoHoursBeforeDue = dueTime.clone().subtract(15, "minutes");
@@ -3886,7 +3986,7 @@ app.post("/update-reminder", async (req, res) => {
 
         console.log(
           `Scheduled 15-minute-before-due reminder for task ${taskId} at ${twoHoursBeforeDue.format(
-            "YYYY-MM-DD HH:mm:ss"
+            "DD-MM-YYYY HH:mm:ss"
           )} IST`
         );
       } else {
@@ -3897,7 +3997,7 @@ app.post("/update-reminder", async (req, res) => {
 
       const existingJob = cronJobs.get(taskId);
 
-      console.log("existingJob===============>", existingJob);
+      // console.log("existingJob===============>", existingJob);
       return res.status(200).json({ message: "Recurring reminder scheduled" });
     } else if (unit === "days") {
       const scheduleReminder = async () => {
@@ -3912,13 +4012,13 @@ app.post("/update-reminder", async (req, res) => {
           });
         console.log(
           `Scheduling next reminder for task ${taskId} at ${nextReminderTime.format(
-            "YYYY-MM-DD HH:mm:ss"
+            "DD-MM-YYYY HH:mm:ss"
           )} IST`
         );
         await supabase.from("reminders").upsert({
           taskId,
           reminder_frequency,
-          nextReminderTime: nextReminderTime.format("YYYY-MM-DD HH:mm:ss"),
+          nextReminderTime: nextReminderTime.format("DD-MM-YYYY HH:mm:ss"),
         });
         const nextDelay = nextReminderTime.diff(moment().tz("Asia/Kolkata"));
         const timeoutId = setTimeout(scheduleReminder, nextDelay);
@@ -3940,18 +4040,18 @@ app.post("/update-reminder", async (req, res) => {
       });
       console.log(
         `Scheduled first reminder for task ${taskId} at ${firstReminderTime.format(
-          "YYYY-MM-DD HH:mm:ss"
+          "DD-MM-YYYY HH:mm:ss"
         )} IST with frequency ${reminder_frequency}`
       );
       await supabase.from("reminders").upsert({
         taskId,
         reminder_frequency,
-        nextReminderTime: firstReminderTime.format("YYYY-MM-DD HH:mm:ss"),
+        nextReminderTime: firstReminderTime.format("DD-MM-YYYY HH:mm:ss"),
       });
 
       const dueTime = moment.tz(
         dueDateTime,
-        "YYYY-MM-DD HH:mm",
+        "DD-MM-YYYY HH:mm",
         "Asia/Kolkata"
       );
       const twoHoursBeforeDue = dueTime.clone().subtract(15, "minutes");
@@ -4029,7 +4129,7 @@ app.post("/update-reminder", async (req, res) => {
 
         console.log(
           `Scheduled 15-minute-before-due reminder for task ${taskId} at ${twoHoursBeforeDue.format(
-            "YYYY-MM-DD HH:mm:ss"
+            "DD-MM-YYYY HH:mm:ss"
           )} IST`
         );
       } else {
@@ -4040,7 +4140,7 @@ app.post("/update-reminder", async (req, res) => {
 
       const existingJob = cronJobs.get(taskId);
 
-      console.log("existingJob===============>", existingJob);
+      // console.log("existingJob===============>", existingJob);
       return res.status(200).json({ message: "Recurring reminder scheduled" });
     } else {
       console.log("Unsupported frequency unit:", unit);
