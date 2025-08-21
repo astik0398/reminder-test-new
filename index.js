@@ -632,7 +632,7 @@ const normalizedDeadline = `${datePart} ${hour}:${minute}`;
       };
 
       // Call the /update-reminder endpoint
-      const response = await fetch("http://localhost:8000/update-reminder", {
+      const response = await fetch("https://reminder-test-new-production.up.railway.app/update-reminder", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1080,7 +1080,7 @@ Thank you for providing the task details! Here's a quick summary:
                 session.conversationHistory = [];
 
                 await fetch(
-                  "http://localhost:8000/update-reminder",
+                  "https://reminder-test-new-production.up.railway.app/update-reminder",
                   {
                     method: "POST",
                     headers: {
@@ -4173,7 +4173,7 @@ async function getAllEmployerPhones() {
   return Object.values(employerMap);
 }
 
-cron.schedule("* * * * *", async () => {
+cron.schedule("0 */5 * * *", async () => {
   console.log("⏰ Running scheduled job...");
 
   try {
