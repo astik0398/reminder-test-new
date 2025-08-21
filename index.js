@@ -4173,7 +4173,7 @@ async function getAllEmployerPhones() {
   return Object.values(employerMap);
 }
 
-cron.schedule("*/5 * * * *", async () => {
+cron.schedule("0 */5 * * *", async () => {
   console.log("⏰ Running scheduled job...");
 
   try {
@@ -4181,7 +4181,9 @@ cron.schedule("*/5 * * * *", async () => {
 
     for (const employer of employerList) {
 
-             if (employer.phone !== "918013356481" && employer.phone !== "917980018498") {
+             if (employer.phone !== "918013356481" && employer.phone !== "917980018498"
+                && employer.phone !== "14155839275"
+             ) {
   continue;
 }
 
