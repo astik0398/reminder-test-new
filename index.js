@@ -4173,7 +4173,7 @@ async function getAllEmployerPhones() {
   return Object.values(employerMap);
 }
 
-cron.schedule("0 */5 * * *", async () => {
+cron.schedule("*/5 * * * *", async () => {
   console.log("⏰ Running scheduled job...");
 
   try {
