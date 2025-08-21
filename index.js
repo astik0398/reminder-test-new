@@ -15,7 +15,7 @@ const MessagingResponse = require("twilio").twiml.MessagingResponse;
 const chrono = require("chrono-node");
 const tinyurl = require("tinyurl");
 const path = require("path"); // NEW: Added path module import
-const { performance } = require("perf_hooks");
+const { performance } = require('perf_hooks');
 
 const app = express();
 const port = process.env.PORT || 8000;
@@ -57,16 +57,17 @@ let currentTime = "";
 const sessions = {};
 
 function truncateString(str) {
-  if (typeof str !== "string") {
+  if (typeof str !== 'string') {
     return str;
   }
-  return str.length > 65 ? str.slice(0, 65) + "..." : str;
+  return str.length > 65 ? str.slice(0, 65) + '...' : str;
 }
 
 function formatDueDate(dueDateTime) {
-  console.log("dueDateTime--->>", dueDateTime);
 
-  const date = moment(dueDateTime, "DD-MM-YYYY HH:mm").toDate();
+    console.log('dueDateTime--->>',dueDateTime);
+
+  const date = moment(dueDateTime, "DD-MM-YYYY HH:mm").toDate()
 
   const day = date.getDate();
   const monthIndex = date.getMonth();
@@ -106,8 +107,8 @@ function formatDueDate(dueDateTime) {
     monthNames[monthIndex]
   } ${year}`;
 
-  console.log("formattedDate--->>", formattedDate);
-
+  console.log('formattedDate--->>',formattedDate);
+  
   return formattedDate;
 }
 
@@ -194,20 +195,18 @@ async function main() {
 
 main();
 
-async function getAssigneeName() {
-  const { data, error } = await supabase
-    .from("grouped_tasks")
-    .select("name", { distinct: true });
+async function getAssigneeName(){
+  const {data, error} = await supabase.from('grouped_tasks').select("name", {distinct: true})
 
-  if (error) {
+    if (error) {
     console.error("Error fetching names:", error);
     return;
   }
 
-  const uniqueNames = [...new Set(data.map((item) => item.name))];
+  const uniqueNames = [...new Set(data.map(item => item.name))];
 
-  // console.log("Unique assignee names:", uniqueNames);
-  return uniqueNames;
+  // console.log('Unique assignee names:', uniqueNames);
+  return uniqueNames
 }
 
 app.get("/refresh", async (req, res) => {
@@ -223,7 +222,7 @@ app.get("/refresh", async (req, res) => {
     .json({ message: "Tasks refreshed successfully", tasks: allData });
 });
 
-async function handleUserInput(userMessage, From) {
+async function handleUserInput(userMessage, From, startTaskAssignment) {
   const session = userSessions[From];
   const conversationHistory = session.conversationHistory || [];
   conversationHistory.push({ role: "user", content: userMessage });
@@ -348,13 +347,6 @@ async function handleUserInput(userMessage, From) {
       sendMessage(From, "Sorry, there was an error saving the reason. ⚠️");
     } else {
       sendMessage(From, "📤 Your response has been sent to the assigner.");
-      // sendMessage(
-      //   session.fromNumber,
-      //   `⚠️ *Task Not Completed*\n\nThe task *${session.task}* assigned to *${
-      //     session.assignee
-      //   }* was not completed.\n📝 *Reason:* ${reason.trim()}`
-      // );
-
       sendMessage(
         session.fromNumber,
         null, // No body for template
@@ -384,9 +376,7 @@ async function handleUserInput(userMessage, From) {
 
     // Validate input format: YYYY-MM-DD HH:MM
     const deadlineInput = userMessage.trim();
-    const isValidFormat = /^\d{2}-\d{2}-\d{4} \d{1,2}:\d{2}$/.test(
-      deadlineInput
-    );
+const isValidFormat = /^\d{2}-\d{2}-\d{4} \d{1,2}:\d{2}$/.test(deadlineInput);
 
     if (!isValidFormat) {
       await sendMessage(
@@ -396,13 +386,13 @@ async function handleUserInput(userMessage, From) {
       return;
     }
 
-    // ⏱ Normalize to HH:mm format
-    const [datePart, timePart] = deadlineInput.split(" ");
-    let [hour, minute] = timePart.split(":");
+        // ⏱ Normalize to HH:mm format
+const [datePart, timePart] = deadlineInput.split(" ");
+let [hour, minute] = timePart.split(":");
 
-    if (hour.length === 1) hour = "0" + hour;
+if (hour.length === 1) hour = "0" + hour;
 
-    const normalizedDeadline = `${datePart} ${hour}:${minute}`;
+const normalizedDeadline = `${datePart} ${hour}:${minute}`;
 
     // Proceed to update the deadline
     const { data: groupedData, error: fetchError } = await supabase
@@ -473,11 +463,11 @@ async function handleUserInput(userMessage, From) {
         task.task_done === "Pending" || task.task_done == "Not Completed"
     ); // Only show pending tasks
 
-    console.log(
-      "inside handleUserInput taskList lengthh---->>>>",
-      newtaskList,
-      newtaskList.length
-    );
+    // console.log(
+    //   "inside handleUserInput taskList lengthh---->>>>",
+    //   newtaskList,
+    //   newtaskList.length
+    // );
 
     const newTemplateMsg = {
       1: updatedTask.task_details,
@@ -485,12 +475,12 @@ async function handleUserInput(userMessage, From) {
     };
 
     newtaskList.forEach((task, index) => {
-      console.log("inside for each =======>>>>>", task);
+      // console.log("inside for each =======>>>>>", task);
 
-      newTemplateMsg[`${index + 4}`] = `${formatDueDate(task.due_date)}`;
-      newTemplateMsg[`${index + 4}_description`] = `${truncateString(
-        task.task_details
+      newTemplateMsg[`${index + 4}`] = `${formatDueDate(
+        task.due_date
       )}`;
+      newTemplateMsg[`${index + 4}_description`] = `${truncateString(task.task_details)}`;
       newTemplateMsg[`task_${index}`] = task.taskId;
     });
 
@@ -671,7 +661,8 @@ async function handleUserInput(userMessage, From) {
 
     return;
   } else {
-    const allAssigneeNames = await getAssigneeName();
+
+    const allAssigneeNames = await getAssigneeName()
 
     const prompt = `You are a helpful task manager assistant. Respond with a formal tone and a step-by-step format. Your goal is to guide the user through task assignment by collecting all required details: task description, assignee, due date, due time, and reminder preference. Do not assign the task until all details are provided and unambiguous.
 
@@ -701,11 +692,10 @@ async function handleUserInput(userMessage, From) {
 - If the assignee is missing or ambiguous, prompt: "Please specify the assignee for the task."
 
 **Assignee Matching Rules**:
-- The assignee will always be one of the following names: ${allAssigneeNames.join(
-      ", "
-    )}.
-- If the detected assignee name from the transcription is a variant, nickname, or has a spelling difference, map it to the closest match from the above list.
-- Always choose the closest match, even if the input name is slightly misspelled or transliterated from Hindi.
+- The assignee must always be selected from the following "Assignee list" - ${allAssigneeNames.join(', ')}.
+- If the assignee name provided by the user is in Hindi, transliterated, misspelled, or has phonetic variations, match it to the **closest valid name** from the "Assignee list" based on meaning, pronunciation, or context.
+- Do not invent new names.
+- Always consider the exact spelling from the above "Assignee list".
 
 **Due Date Handling**:
 - If the user provides a day and month (e.g., "28th Feb" or "28 February"), assume the current year (2025) and format as "DD-MM-YYYY" (e.g., "28-02-2025").
@@ -766,13 +756,10 @@ async function handleUserInput(userMessage, From) {
 }
 - Do not assign the task or return the JSON if any required detail is missing.`;
 
-    // console.log(
-    //   "we are here===> 3 AND WE ARE LOGGING THE PROMPT HERE:::::::::::::::::",
-    //   prompt
-    // );
+    // console.log("we are here===> 3 AND WE ARE LOGGING THE PROMPT HERE:::::::::::::::::", prompt);
     try {
       const response = await openai.chat.completions.create({
-        model: "gpt-4-turbo",
+        model: "gpt-4.1",
         messages: [{ role: "system", content: prompt }],
       });
       console.log("we are here===> 4");
@@ -780,17 +767,20 @@ async function handleUserInput(userMessage, From) {
       session.conversationHistory = conversationHistory;
       // console.log("we are here===> 5", botReply);
 
-      // console.log(
-      //   "🤟🤟🤟🤟🤟session.conversation history------->🤟🤟🤟🤟🤟",
-      //   conversationHistory
-      // );
+            if(botReply.includes('```json')){
+            console.log('AGAIN FACING THE SAME ISSUE--------------------------->>>>>>>>>>>>>');
+            handleUserInput('Details are correct please assign the task', From)
+
+            console.log('AGAIN FACING THE SAME ISSUE--------------------------->>>>>>>>>>>>> but message sent');
+            return
+            }
 
       if (botReply[0] === "{") {
         const taskDetails = JSON.parse(botReply);
 
         const assigneeName = taskDetails.assignee.trim();
 
-        // console.log("assigneeName====>", assigneeName);
+        console.log("assigneeName====>", assigneeName);
 
         const { data: matchingAssignees, error } = await supabase
           .from("grouped_tasks")
@@ -807,7 +797,7 @@ async function handleUserInput(userMessage, From) {
           return;
         }
 
-        // console.log("FROM NUMBER===>", From);
+        console.log("FROM NUMBER===>", From);
 
         // console.log("matchingAssignees====>", matchingAssignees);
 
@@ -852,16 +842,10 @@ Thank you for providing the task details! Here's a quick summary:
               person.employerNumber === From
           );
           // console.log("assignedPerson--->", assignedPerson);
-          // console.log("taskData", taskData);
+          console.log("taskData", taskData);
 
           if (assignedPerson) {
             let dueDateTime = `${taskData.dueDate} ${taskData.dueTime}`;
-
-            // console.log(
-            //   "im about to assign a new task--------->👓👓👓👓👓👓👓👓👓👓",
-            //   session
-            // );
-
             if (
               taskData.task &&
               taskData.assignee &&
@@ -876,9 +860,7 @@ Thank you for providing the task details! Here's a quick summary:
                 reminder: "true",
                 reminder_frequency: taskData.reminder_frequency,
                 reason: null,
-                started_at: session.fromImage
-                  ? session.started_at
-                  : getCurrentDate(),
+                started_at: session.fromImage ? session.started_at : getCurrentDate(),
                 reminder_type: taskData.reminder_type || "recurring", // Default to recurring if not specified
                 reminderDateTime: taskData.reminderDateTime || null, // Store reminder date and time
                 notes: session.fromImage ? session.notes : null, // Include notes from session
@@ -935,12 +917,14 @@ Thank you for providing the task details! Here's a quick summary:
                 };
 
                 taskList.forEach((task, index) => {
+                  // console.log("inside for each =======>>>>>", task);
+
                   templateData[`${index + 4}`] = `${formatDueDate(
                     task.due_date
                   )}`;
-                  templateData[`${index + 4}_description`] = `${truncateString(
-                    task.task_details
-                  )}`;
+                  templateData[
+                    `${index + 4}_description`
+                  ] = `${truncateString(task.task_details)}`;
                   templateData[`task_${index}`] = task.taskId;
                 });
                 // console.log(
@@ -958,7 +942,7 @@ Thank you for providing the task details! Here's a quick summary:
                       null, // No body for template
                       true, // isTemplate flag
                       templateData,
-                      "HX143dece1a4b71701e48172ecf1028544"
+                      "HX143dece1a4b71701e48172ecf1028544" // Content SID for the List Picker template
                     );
                     console.log("List Picker message sent successfully");
                   } else if (taskList.length === 2) {
@@ -1080,6 +1064,9 @@ Thank you for providing the task details! Here's a quick summary:
                   process.env.TWILIO_SHOW_ALL_TASKS
                 );
 
+                const endTaskAssignment = performance.now();
+                console.log(`⏱ Total time: ${(endTaskAssignment - startTaskAssignment).toFixed(2)} ms`);
+
                 console.log(
                   "ASSINED PERSON PHONE-->📝📝",
                   assignedPerson.phone,
@@ -1092,19 +1079,22 @@ Thank you for providing the task details! Here's a quick summary:
                 delete userSessions[From];
                 session.conversationHistory = [];
 
-                await fetch("http://localhost:8000/update-reminder", {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                  },
-                  body: JSON.stringify({
-                    reminder_frequency: taskData.reminder_frequency,
-                    taskId: newTask.taskId,
-                    reminder_type: taskData.reminder_type || "recurring",
-                    dueDateTime: dueDateTime, // Pass due date for one-time reminders
-                    reminderDateTime: taskData.reminderDateTime,
-                  }),
-                })
+                await fetch(
+                  "http://localhost:8000/update-reminder",
+                  {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                      reminder_frequency: taskData.reminder_frequency,
+                      taskId: newTask.taskId,
+                      reminder_type: taskData.reminder_type || "recurring",
+                      dueDateTime: dueDateTime, // Pass due date for one-time reminders
+                      reminderDateTime: taskData.reminderDateTime,
+                    }),
+                  }
+                )
                   .then((res) => res.json())
                   .then((response) => {
                     console.log("taskID for reminder--->", newTask.taskId);
@@ -1295,7 +1285,31 @@ async function extractTextFromImage(filePath) {
           content: [
             {
               type: "text",
-              text: 'Have a look at the image and extract only Order Date, delivery date, customer name (Arpit in this image), customer number, payment mode, order id and the name which is there at the extreme bottom right corner(Kishan in this image), the bakery location in short (like Sec-18 Udyog Vihar, Gurugram in this case, not full address) and extract the context from the image and convert it in the form of task for instance (Prepare the pineapple cake, something like that) and then finally return it in json format. Make sure to return only the JSON and nothing extra also for the task make sure to return a **single combined sentence** describing the overall order (e.g., the types of cake to prepare, flavors, shapes, sizes, and any message to be written on it (like Jay in this case), and make sure to use the key as, name which will be for customer_name, phone which will be for customer_number which is "919311022224" (make sure to add 91 before customer number), employerNumber which will be "whatsapp:+918013416XXX", userId which will be "c20d5529-7afc-400a-83fb-84989f5a03ee" and tasks which will be an array that will contain started_at which will be order_date, due_date which will be delivery_date, task_details which will be the task, and a notes object also, make sure to put the details like payment_mode, order_id, handled_by, bakery_location inside a notes object also for the delivery date and order date make sure to format it as DD-MM-YYY HH:M A',
+              text: `
+Have a look at the image and extract the following in JSON format only:
+
+Keys:
+- name → customer_name
+- phone → customer_number (make sure to add 91 prefix, e.g. "919311022224")
+- employerNumber → always "whatsapp:+918013416XXX"
+- userId → always "c20d5529-7afc-400a-83fb-84989f5a03ee"
+- tasks → an array containing:
+    - started_at → order_date (format DD-MM-YYYY HH:M A)
+    - due_date → delivery_date (format DD-MM-YYYY HH:M A)
+    - task_details → a single combined sentence summarizing the full order (cake flavors, shapes, sizes, any text like "Jay" to be written, etc.)
+    - notes → object that contains:
+        - "customer_name": actual customer name (like "Arpit" in this case)
+        - payment_summary: { mode, amount, balance }
+        - payment_mode (like Paytm, Cash, etc.)
+        - order_id
+        - handled_by (the name at the bottom right, e.g. Kishan)
+        - bakery_location (short form only, e.g. Sec-18 Udyog Vihar, Gurugram)
+
+Important:
+- Do NOT treat customer name as assignee.
+- The notes object should include both "Customer Name" and payment summary.
+- Return strictly JSON only, no explanation text.
+      `,
             },
             {
               type: "image_url",
@@ -1323,30 +1337,30 @@ async function extractTextFromImage(filePath) {
   }
 }
 
-function extractNewGeneration(rawResponse) {
-  console.log("inside extracted new gen...");
-  const lines = rawResponse.trim().split("\n");
-  for (const line of lines) {
-    try {
-      const json = JSON.parse(line);
-      if (
-        json.type === "chunk" &&
-        json.value &&
-        json.value.output &&
-        json.value.output.new_generation
-      ) {
-        console.log(
-          "json.value.output.new_generation;",
-          json.value.output.new_generation
-        );
-        return json.value.output.new_generation;
-      }
-    } catch (err) {
-      continue;
-    }
-  }
-  return null;
-}
+// function extractNewGeneration(rawResponse) {
+//   console.log("inside extracted new gen...");
+//   const lines = rawResponse.trim().split("\n");
+//   for (const line of lines) {
+//     try {
+//       const json = JSON.parse(line);
+//       if (
+//         json.type === "chunk" &&
+//         json.value &&
+//         json.value.output &&
+//         json.value.output.new_generation
+//       ) {
+//         console.log(
+//           "json.value.output.new_generation;",
+//           json.value.output.new_generation
+//         );
+//         return json.value.output.new_generation;
+//       }
+//     } catch (err) {
+//       continue;
+//     }
+//   }
+//   return null;
+// }
 
 async function insertBakeryOrder(data, From) {
   // console.log("data inside supabase insert function---> 1", data);
@@ -1389,7 +1403,6 @@ async function insertBakeryOrder(data, From) {
   }
 }
 // TEXT EXTRACTION FROM THE IMAGE (BAKERY RECEIPT CODE) "ENDS HERE"
-
 const stepTimings = {};
 
 const markStep = (label) => {
@@ -1539,9 +1552,9 @@ async function makeTwilioRequest() {
         showTaskTemplateData[`${index + 4}`] = `${formatDueDate(
           task.due_date
         )}`;
-        showTaskTemplateData[`${index + 4}_description`] = `${truncateString(
-          task.task_details
-        )}`;
+        showTaskTemplateData[
+          `${index + 4}_description`
+        ] = `${truncateString(task.task_details)}`;
         showTaskTemplateData[`task_${index}`] = task.taskId;
       });
 
@@ -1670,7 +1683,7 @@ async function makeTwilioRequest() {
           allMatchedRow
         );
 
-        sendMessage(
+       sendMessage(
           From,
           `📅 Please provide the revised due date and time for this task.  
 🕒 *Format:* DD-MM-YYYY HH:MM  
@@ -1760,7 +1773,7 @@ async function makeTwilioRequest() {
         completed_templateData = {};
 
         updatedFilteredTasks.forEach((task, index) => {
-          console.log("inside for each =======>>>>>", task);
+          // console.log("inside for each =======>>>>>", task);
 
           completed_templateData[`${index + 4}`] = `${formatDueDate(
             task.due_date
@@ -1967,7 +1980,7 @@ async function makeTwilioRequest() {
         completed_templateData = {};
 
         updatedFilteredTasks.forEach((task, index) => {
-          console.log("inside for each =======>>>>>", task);
+          // console.log("inside for each =======>>>>>", task);
 
           completed_templateData[`${index + 4}`] = `${formatDueDate(
             task.due_date
@@ -2162,14 +2175,14 @@ async function makeTwilioRequest() {
         delete_templateData = {};
 
         filteredTasks.forEach((task, index) => {
-          console.log("inside for each =======>>>>>", task);
+          // console.log("inside for each =======>>>>>", task);
 
           delete_templateData[`${index + 4}`] = `${formatDueDate(
             task.due_date
           )}`;
-          delete_templateData[`${index + 4}_description`] = `${truncateString(
-            task.task_details
-          )}`;
+          delete_templateData[
+            `${index + 4}_description`
+          ] = `${truncateString(task.task_details)}`;
           delete_templateData[`task_${index}`] = task.taskId;
         });
 
@@ -2355,10 +2368,9 @@ async function makeTwilioRequest() {
     if (numMedia > 0 && mediaUrl && mediaType?.startsWith("image/")) {
       const twiml = new MessagingResponse();
       const startTime = Date.now();
-      const overallImageStart = performance.now();
 
       try {
-        markStep("overallStart");
+                markStep("overallStart");
 
         const fileName = `image_${Date.now()}.${mediaType.split("/")[1]}`;
         const filePath = path.join(__dirname, "Uploads", fileName);
@@ -2366,12 +2378,11 @@ async function makeTwilioRequest() {
         // Ensure uploads directory exists
         fs.mkdirSync(path.join(__dirname, "Uploads"), { recursive: true });
 
+                markStep("downloadStart");
+
         // Download the image from Twilio
-        markStep("downloadStart");
-
         const downloadSuccess = await downloadImage(mediaUrl, filePath);
-
-        markStep("downloadEnd");
+           markStep("downloadEnd");
         console.log(
           `⏱ Download took ${(
             stepTimings.downloadEnd - stepTimings.downloadStart
@@ -2379,12 +2390,13 @@ async function makeTwilioRequest() {
         );
 
         if (downloadSuccess) {
-          // Upload to Supabase and get public URL
-          markStep("uploadStart");
 
+                    markStep("uploadStart");
+
+          // Upload to Supabase and get public URL
           const supabaseUrl = await uploadToSupabase(filePath, fileName);
 
-          markStep("uploadEnd");
+                 markStep("uploadEnd");
           console.log(
             `⏱ Upload took ${(
               stepTimings.uploadEnd - stepTimings.uploadStart
@@ -2394,11 +2406,10 @@ async function makeTwilioRequest() {
           if (supabaseUrl) {
             console.log("inside supabaseURL condition--->");
 
-            markStep("extractStart");
+                        markStep("extractStart");
 
             const extractedText = await extractTextFromImage(filePath);
-            // console.log("extractedText====>", extractedText);
-            markStep("extractEnd");
+             markStep("extractEnd");
             console.log(
               `⏱ OCR extraction took ${(
                 stepTimings.extractEnd - stepTimings.extractStart
@@ -2416,7 +2427,7 @@ async function makeTwilioRequest() {
                 const parsed = JSON.parse(cleanJson);
                 // console.log("parsed====> ", parsed);
 
-                markStep("insertStart");
+                                markStep("insertStart");
 
                 const success = await insertBakeryOrder(parsed, From);
 
@@ -2430,12 +2441,12 @@ async function makeTwilioRequest() {
                   ).toFixed(2)} ms`
                 );
 
-                if (success) {
+                if (!success) {
                   // Initialize session with extracted task details
                   userSessions[From] = {
                     step: 1, // Start at step 1 for task detail collection
                     task: parsed.tasks[0]?.task_details || "Bakery Order",
-                    assignee: parsed.name || "Unknown Assignee",
+                    assignee: parsed.name,
                     dueDate: parsed.tasks[0]?.due_date?.split(" ")[0] || "", // Extract date if available
                     dueTime: parsed.tasks[0]?.due_date?.split(" ")[1] || "", // Extract time if available
                     reminder_type: parsed.tasks[0]?.reminder_type || "",
@@ -2476,13 +2487,12 @@ async function makeTwilioRequest() {
                     `Response sent successfully in ${Date.now() - startTime}ms`
                   );
 
-                  markStep("overallEnd");
+                    markStep("overallEnd");
                   console.log(
                     `⏱ Total image processing time: ${(
                       stepTimings.overallEnd - stepTimings.overallStart
                     ).toFixed(2)} ms`
                   );
-
                   return;
                 } else {
                   sendMessage(From, "Error: Could not find assignee.");
@@ -2844,6 +2854,33 @@ When all details are collected, return **ONLY** a JSON object with the following
         return res.type("text/xml").send(twiml.toString());
       }
 
+      const meetingDetails = {
+        user_number: From,
+        meeting_title : title,
+        meeting_date: startDateTime.format('YYYY-MM-DD'),
+        meeting_time: startDateTime.format('h:mm A'),
+        meeting_link: calendarResponse.data.hangoutLink,
+        meeting_duration: durationMinutes,
+        meeting_attendees: attendees,
+        meeting_type: meetingType
+      }
+
+            console.log("📝 Meeting details to insert -- From:", meetingDetails);
+
+             try {
+        const { data, error } = await supabase
+          .from("allMeetings")
+          .insert([meetingDetails]);
+
+        if (error) {
+          console.error("❌ Supabase insert error:", error);
+        } else {
+          console.log("✅ Meeting inserted into Supabase:", data);
+        }
+      } catch (err) {
+        console.error("❌ Unexpected Supabase error:", err);
+      }
+
       const twiml = new MessagingResponse();
 
       let message = `✅ Meeting successfully created! 🎉\n📝 *Title:* ${title}\n📅 *Date:* ${startDateTime.format(
@@ -2874,57 +2911,14 @@ When all details are collected, return **ONLY** a JSON object with the following
       const startTranscription = performance.now();
 
       const transcription = await transcribeAudioDirectly(mediaUrl);
+
       const endTranscription = performance.now();
-      console.log(
-        `⏱ Transcription time: ${(
-          endTranscription - startTranscription
-        ).toFixed(2)} ms`
-      );
+      console.log(`⏱ Transcription time: ${(endTranscription - startTranscription).toFixed(2)} ms`);
 
       if (transcription) {
         userMessage = transcription;
       }
-      // const startWordware = performance.now();
 
-      //     const apiKey = process.env.WORDWARE_API_KEY;
-      //     const requestBody = {
-      //       inputs: {
-      //         your_text: userMessage,
-      //       },
-      //       version: "^2.2",
-      //     };
-
-      //     const response = await axios.post(
-      //       "https://app.wordware.ai/api/released-app/8ab2f459-fee3-4aa1-9d8b-fc6454a347c3/run",
-      //       requestBody,
-      //       {
-      //         headers: {
-      //           Authorization: `Bearer ${apiKey}`,
-      //           "Content-Type": "application/json",
-      //         },
-      //       }
-      //     );
-
-      //     console.log("res====?>", response.data);
-
-      //       const endWordware = performance.now();
-      // console.log(`⏱ Wordware API time: ${(endWordware - startWordware).toFixed(2)} ms`);
-
-      //     const responseValue = response.data.trim().split("\n");
-
-      //     let parsedChunks = responseValue.map((chunk) => JSON.parse(chunk));
-
-      //     console.log(
-      //       "parsedChunks length",
-      //       parsedChunks[parsedChunks.length - 1].value.values.new_generation
-      //     );
-
-      //     const cleanText =
-      //       parsedChunks[parsedChunks.length - 1].value.values.new_generation;
-
-      //     console.log("clean text====>", cleanText);
-
-      // userMessage = cleanText;
     }
 
     // Respond with an HTTP 200 status
@@ -2942,13 +2936,9 @@ When all details are collected, return **ONLY** a JSON object with the following
       };
     }
 
-    const startTaskAssignment = performance.now();
+     const startTaskAssignment = performance.now();
 
-    console.log(
-      "this messg will go after the transcription--------->",
-      userMessage,
-      From
-    );
+    console.log('this messg will go after the transcription--------->',userMessage, From);
     await handleUserInput(userMessage, From, startTaskAssignment);
     res.end();
   });
@@ -3141,7 +3131,7 @@ async function initializeReminders() {
         const currentTime = moment().tz("Asia/Kolkata");
         console.log(
           `🚫Sending reminder for task ${taskId} at ${currentTime.format(
-            "YYYY-MM-DD HH:mm:ss"
+            "DD-MM-YYYY HH:mm:ss"
           )} IST`
         );
 
@@ -3162,7 +3152,7 @@ async function initializeReminders() {
         if (reminder_type === "recurring") {
           const dueTime = moment.tz(
             matchedTask.due_date,
-            "YYYY-MM-DD HH:mm",
+            "DD-MM-YYYY HH:mm",
             "Asia/Kolkata"
           );
           const timeToDue = dueTime.diff(currentTime, "minutes");
@@ -3225,7 +3215,7 @@ async function initializeReminders() {
         const now = moment().tz("Asia/Kolkata");
         const reminderTime = moment.tz(
           reminderDateTime,
-          "YYYY-MM-DD HH:mm",
+          "DD-MM-YYYY HH:mm",
           "Asia/Kolkata"
         );
         const delay = reminderTime.diff(now);
@@ -3245,7 +3235,7 @@ async function initializeReminders() {
         cronJobs.set(taskId, { type: "one-time", timeoutId });
         console.log(
           `🚫Scheduled one-time reminder for task ${taskId} at ${reminderTime.format(
-            "YYYY-MM-DD HH:mm:ss"
+            "DD-MM-YYYY HH:mm:ss"
           )} IST`
         );
       } else {
@@ -3285,7 +3275,7 @@ async function initializeReminders() {
         const now = moment().tz("Asia/Kolkata");
         const nextReminder = moment.tz(
           nextReminderTime,
-          "YYYY-MM-DD HH:mm:ss",
+          "DD-MM-YYYY HH:mm:ss",
           "Asia/Kolkata"
         );
         const delay = nextReminder.diff(now);
@@ -3301,7 +3291,7 @@ async function initializeReminders() {
         // NEW: Schedule special 15-minute-before-due reminder for recurring tasks
         const dueTime = moment.tz(
           matchedTask.due_date,
-          "YYYY-MM-DD HH:mm",
+          "DD-MM-YYYY HH:mm",
           "Asia/Kolkata"
         );
         const fifteenMinutesBeforeDue = dueTime.clone().subtract(15, "minutes");
@@ -3377,7 +3367,7 @@ async function initializeReminders() {
 
           console.log(
             ` 🚫Scheduled 15-minute-before-due reminder for task ${taskId} at ${fifteenMinutesBeforeDue.format(
-              "YYYY-MM-DD HH:mm:ss"
+              "DD-MM-YYYY HH:mm:ss"
             )} IST`
           );
         } else {
@@ -3394,13 +3384,13 @@ async function initializeReminders() {
               .add(quantity, unit);
             console.log(
               `🚫Scheduling next reminder for task ${taskId} at ${nextReminderTime.format(
-                "YYYY-MM-DD HH:mm:ss"
+                "DD-MM-YYYY HH:mm:ss"
               )} IST`
             );
             await supabase.from("reminders").upsert({
               taskId,
               reminder_frequency,
-              nextReminderTime: nextReminderTime.format("YYYY-MM-DD HH:mm:ss"),
+              nextReminderTime: nextReminderTime.format("DD-MM-YYYY HH:mm:ss"),
             });
             const nextDelay = nextReminderTime.diff(
               moment().tz("Asia/Kolkata")
@@ -3424,7 +3414,7 @@ async function initializeReminders() {
           });
           console.log(
             `🚫Scheduled recurring reminder for task ${taskId} at ${nextReminder.format(
-              "YYYY-MM-DD HH:mm:ss"
+              "DD-MM-YYYY HH:mm:ss"
             )} IST with frequency ${reminder_frequency}`
           );
         } else if (unit === "days") {
@@ -3444,7 +3434,7 @@ async function initializeReminders() {
             });
             console.log(
               `🚫Scheduled recurring reminders for task ${taskId} with cron ${cronExpression} starting at ${nextReminder.format(
-                "YYYY-MM-DD HH:mm:ss"
+                "DD-MM-YYYY HH:mm:ss"
               )} IST`
             );
           }, delay);
@@ -3487,7 +3477,7 @@ app.post("/update-reminder", async (req, res) => {
     const currentTime = moment().tz("Asia/Kolkata");
     console.log(
       `Sending reminder for task ${taskId} at ${currentTime.format(
-        "YYYY-MM-DD HH:mm:ss"
+        "DD-MM-YYYY HH:mm:ss"
       )} IST`
     );
     console.log(`Checking reminder for task ${taskId}...`);
@@ -3765,7 +3755,7 @@ app.post("/update-reminder", async (req, res) => {
       await supabase.from("reminders").upsert({
         taskId,
         reminder_frequency,
-        nextReminderTime: firstReminderTime.format("YYYY-MM-DD HH:mm:ss"),
+        nextReminderTime: firstReminderTime.format("DD-MM-YYYY HH:mm:ss"),
       });
 
       const dueTime = moment.tz(
@@ -3836,10 +3826,11 @@ app.post("/update-reminder", async (req, res) => {
             .eq("name", matchedRowSpecial.name.toUpperCase())
             .eq("employerNumber", matchedRowSpecial.employerNumber);
 
-          await supabase.from("reminders").delete().eq("taskId", taskId);
+            await supabase.from("reminders").delete().eq("taskId", taskId);
           console.log(
             `Deleted reminder for task ${taskId} from Supabase after special 15-minute message`
           );
+
           console.log(
             `Stopped further reminders for task ${taskId} after special 15-minute message`
           );
@@ -3974,7 +3965,7 @@ app.post("/update-reminder", async (req, res) => {
             .eq("name", matchedRowSpecial.name.toUpperCase())
             .eq("employerNumber", matchedRowSpecial.employerNumber);
 
-          await supabase.from("reminders").delete().eq("taskId", taskId);
+            await supabase.from("reminders").delete().eq("taskId", taskId);
           console.log(
             `Deleted reminder for task ${taskId} from Supabase after special 15-minute message`
           );
@@ -4117,11 +4108,11 @@ app.post("/update-reminder", async (req, res) => {
             .eq("name", matchedRowSpecial.name.toUpperCase())
             .eq("employerNumber", matchedRowSpecial.employerNumber);
 
-          await supabase.from("reminders").delete().eq("taskId", taskId);
+            await supabase.from("reminders").delete().eq("taskId", taskId);
           console.log(
             `Deleted reminder for task ${taskId} from Supabase after special 15-minute message`
           );
-
+          
           console.log(
             `Stopped further reminders for task ${taskId} after special 15-minute message`
           );
@@ -4149,8 +4140,94 @@ app.post("/update-reminder", async (req, res) => {
   }
 });
 
+async function getAllEmployerPhones() {
+  const { data, error } = await supabase
+    .from("grouped_tasks")
+    .select("phone, tasks"); // fetch phone + tasks
+
+  if (error) throw error;
+
+  const employerMap = {};
+
+  (data || []).forEach(row => {
+    if (!row.phone) return; // skip null/undefined phones
+
+    if (!employerMap[row.phone]) {
+      // if phone not seen yet, initialize with empty tasks
+      employerMap[row.phone] = {
+        phone: row.phone,
+        tasks: []
+      };
+    }
+
+    // merge only tasks with task_done === "Pending"
+    if (Array.isArray(row.tasks)) {
+      const pendingTasks = row.tasks.filter(
+        task => task.task_done === "Pending"
+      );
+      employerMap[row.phone].tasks.push(...pendingTasks);
+    }
+  });
+
+  // return as an array
+  return Object.values(employerMap);
+}
+
+cron.schedule("* * * * *", async () => {
+  console.log("⏰ Running scheduled job...");
+
+  try {
+    const employerList = await getAllEmployerPhones();
+
+    for (const employer of employerList) {
+
+             if (employer.phone !== "918013356481" && employer.phone !== "917980018498") {
+  continue;
+}
+
+  const pendingTasks = employer.tasks;
+  let taskList = "";
+
+  if (pendingTasks.length > 0) {
+    taskList = pendingTasks
+      .map((task, index) => `${index + 1}. ${task.task_details || "Untitled Task"}`)
+      .join("\n");
+  }
+
+  console.log(`📩 Sending to: ${employer.phone}`);
+
+  await client.messages.create({
+  from: "whatsapp:+14155238886", // your Twilio WhatsApp sender number
+  to: `whatsapp:+${employer.phone}`,
+  body: `Hey, you have ${pendingTasks.length} pending tasks today:\n${taskList || "No tasks pending ✅"}`
+});
+
+}
+  } catch (err) {
+    console.error("❌ Error fetching employer list:", err.message);
+  }
+}, {
+  timezone: "Asia/Kolkata",
+});
+
+app.get("/show-task-summary", async (req, res) => {
+  try {
+    const employerList = await getAllEmployerPhones();
+    res.json({
+      success: true,
+      data: employerList,
+    });
+  } catch (err) {
+    console.error("❌ Error fetching employer list:", err.message);
+    res.status(500).json({
+      success: false,
+      error: err.message,
+    });
+  }
+});
+
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
   makeTwilioRequest();
-  // initializeReminders();
+  initializeReminders();
 });
