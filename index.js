@@ -223,13 +223,28 @@ app.get("/refresh", async (req, res) => {
 });
 
 async function handleUserInput(userMessage, From, startTaskAssignment) {
+
+  console.log('startTaskAssignment----', startTaskAssignment);
+
+      // ⭐ MODIFIED: Always initialize session if it doesn't exist
+    if (!userSessions[From]) {
+      userSessions[From] = {
+        conversationHistory: [],   // store conversation
+        step: 0,                   // keep track of flow
+        fromNumber: From,          // save who sent it
+      };
+    }
+  
   const session = userSessions[From];
-  const conversationHistory = session.conversationHistory || [];
+
+    console.log('session----', session);
+
+  const conversationHistory = session?.conversationHistory || [];
   conversationHistory.push({ role: "user", content: userMessage });
 
   assignerMap.push(From);
 
-  if (session.step === 5) {
+  if (session?.step === 5) {
     if (userMessage.toLowerCase() === "yes") {
       const taskId = session.taskId; // Now using taskId instead of task name
       const assignee = session.assignee;
@@ -303,7 +318,7 @@ async function handleUserInput(userMessage, From, startTaskAssignment) {
     } else {
       sendMessage(From, "Please respond with 'Yes' or 'No'.");
     }
-  } else if (session.step === 6) {
+  } else if (session?.step === 6) {
     console.log("session --- >", session);
 
     const reason = userMessage.trim();
@@ -362,7 +377,7 @@ async function handleUserInput(userMessage, From, startTaskAssignment) {
     }
 
     delete userSessions[From];
-  } else if (session.step === 8) {
+  } else if (session?.step === 8) {
     console.log(
       "<--------------------im inside this step which is 8-------------->"
     );
@@ -632,7 +647,7 @@ const normalizedDeadline = `${datePart} ${hour}:${minute}`;
       };
 
       // Call the /update-reminder endpoint
-      const response = await fetch("https://reminder-test-new-production.up.railway.app/update-reminder", {
+      const response = await fetch("http://localhost:8000/update-reminder", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -691,8 +706,13 @@ const normalizedDeadline = `${datePart} ${hour}:${minute}`;
 - Do not assume non-name terms (e.g., "this", "assigning") as the assignee.
 - If the assignee is missing or ambiguous, prompt: "Please specify the assignee for the task."
 
-**Assignee Matching Rules**:
-- The assignee must always be selected from the following "Assignee list" - ${allAssigneeNames.join(', ')}.
+**Assignee Matching Rules (INTERNAL ONLY – do not show to user)**:
+- Always match assignees against this **reference list**:  
+  **${allAssigneeNames.join(', ')}**
+- Correct misspellings, short forms, or phonetic variations using this list.  
+- If no close match is found, fall back to asking the user:  
+  👉 "Please specify the assignee for the task."
+- **Never** display the assignee list in your responses.
 - If the assignee name provided by the user is in Hindi, transliterated, misspelled, or has phonetic variations, match it to the **closest valid name** from the "Assignee list" based on meaning, pronunciation, or context.
 - Do not invent new names.
 - Always consider the exact spelling from the above "Assignee list".
@@ -756,7 +776,7 @@ const normalizedDeadline = `${datePart} ${hour}:${minute}`;
 }
 - Do not assign the task or return the JSON if any required detail is missing.`;
 
-    // console.log("we are here===> 3 AND WE ARE LOGGING THE PROMPT HERE:::::::::::::::::", prompt);
+    console.log("we are here===> 3 AND WE ARE LOGGING THE PROMPT HERE:::::::::::::::::", prompt);
     try {
       const response = await openai.chat.completions.create({
         model: "gpt-4.1",
@@ -1080,7 +1100,7 @@ Thank you for providing the task details! Here's a quick summary:
                 session.conversationHistory = [];
 
                 await fetch(
-                  "https://reminder-test-new-production.up.railway.app/update-reminder",
+                  "http://localhost:8000/update-reminder",
                   {
                     method: "POST",
                     headers: {
@@ -4173,44 +4193,44 @@ async function getAllEmployerPhones() {
   return Object.values(employerMap);
 }
 
-cron.schedule("0 */5 * * *", async () => {
-  console.log("⏰ Running scheduled job...");
+// cron.schedule("0 */5 * * *", async () => {
+//   console.log("⏰ Running scheduled job...");
 
-  try {
-    const employerList = await getAllEmployerPhones();
+//   try {
+//     const employerList = await getAllEmployerPhones();
 
-    for (const employer of employerList) {
+//     for (const employer of employerList) {
 
-             if (employer.phone !== "918013356481" && employer.phone !== "917980018498"
-                && employer.phone !== "14155839275"
-             ) {
-  continue;
-}
+//              if (employer.phone !== "918013356481" && employer.phone !== "917980018498"
+//                 && employer.phone !== "14155839275"
+//              ) {
+//   continue;
+// }
 
-  const pendingTasks = employer.tasks;
-  let taskList = "";
+//   const pendingTasks = employer.tasks;
+//   let taskList = "";
 
-  if (pendingTasks.length > 0) {
-    taskList = pendingTasks
-      .map((task, index) => `${index + 1}. ${task.task_details || "Untitled Task"}`)
-      .join("\n");
-  }
+//   if (pendingTasks.length > 0) {
+//     taskList = pendingTasks
+//       .map((task, index) => `${index + 1}. ${task.task_details || "Untitled Task"}`)
+//       .join("\n");
+//   }
 
-  console.log(`📩 Sending to: ${employer.phone}`);
+//   console.log(`📩 Sending to: ${employer.phone}`);
 
-  await client.messages.create({
-  from: "whatsapp:+14155238886", // your Twilio WhatsApp sender number
-  to: `whatsapp:+${employer.phone}`,
-  body: `Hey, you have ${pendingTasks.length} pending tasks today:\n${taskList || "No tasks pending ✅"}`
-});
+//   await client.messages.create({
+//   from: "whatsapp:+14155238886", // your Twilio WhatsApp sender number
+//   to: `whatsapp:+${employer.phone}`,
+//   body: `Hey, you have ${pendingTasks.length} pending tasks today:\n${taskList || "No tasks pending ✅"}`
+// });
 
-}
-  } catch (err) {
-    console.error("❌ Error fetching employer list:", err.message);
-  }
-}, {
-  timezone: "Asia/Kolkata",
-});
+// }
+//   } catch (err) {
+//     console.error("❌ Error fetching employer list:", err.message);
+//   }
+// }, {
+//   timezone: "Asia/Kolkata",
+// });
 
 app.get("/show-task-summary", async (req, res) => {
   try {
@@ -4228,8 +4248,93 @@ app.get("/show-task-summary", async (req, res) => {
   }
 });
 
+const TARGET_GROUP_ID_1 = "120363402833579294@g.us";
+const TARGET_GROUP_ID_2 = "120363420284036516@g.us"
+
+// 🔹 Map of WhatsApp numbers to human-readable names
+const numberToNameMap = {
+  "918013356481": "Astik",
+  "917980018498": "Mayank",
+  "14155839275": "ANANDINI MAM"
+  // add all group members here
+};
+
+// 🔹 Utility function to parse @Name mentions in message body
+function parseMentions(body) {
+  const mentionRegex = /@(\w+)/g; // matches @Name
+  const mentions = [];
+  let match;
+  while ((match = mentionRegex.exec(body)) !== null) {
+    mentions.push(match[1]); // the name after @
+  }
+  return mentions;
+}
+
+// 🔹 Function to replace @Name in text with whatsapp:+<number>
+function replaceMentionsWithNumbers(text) {
+  const mentions = parseMentions(text);
+  let replacedText = text;
+
+  mentions.forEach((name) => {
+    const number = Object.keys(numberToNameMap).find(
+      (num) => numberToNameMap[num].toLowerCase() === name.toLowerCase()
+    );
+    if (number) {
+      replacedText = replacedText.replace(
+        new RegExp(`@${name}`, "g"),
+        `whatsapp:+${number}`
+      );
+    }
+  });
+
+  return replacedText;
+}
+
+app.post('/webhook', (req, res) => {
+    const message = req.body;
+
+    todayDate = getFormattedDate();
+    currentTime = getFormattedTime();
+
+    if (message.data && (message.data.from === TARGET_GROUP_ID_1 || message.data.from === TARGET_GROUP_ID_2) || (message.data.to === TARGET_GROUP_ID_1 || message.data.to === TARGET_GROUP_ID_2)) {
+
+                  console.log('message ----2', message);
+
+        let sender;
+        let cleanNum
+
+        if (message.data.fromMe) {
+            console.log('inside fromme ==== true');
+            
+            sender = "Me"; // ✅ show "Me" for your own messages
+            let number = message.data.from
+            const cleanNumber = number.replace("@c.us", "");
+            cleanNum = cleanNumber
+
+        } else {
+                        console.log('inside fromme ==== falseeeeee');
+let number = message.data.author
+            const cleanNumber = number.replace("@c.us", "");
+                        cleanNum = cleanNumber
+
+            sender = message.data.pushname || message.data.author || "Unknown";
+        }
+
+        const text = message.data.body || '';
+        console.log(`${sender}: ${text}`);
+
+ // 🔹 Replace @Name mentions with whatsapp:+<number>
+    const processedText = replaceMentionsWithNumbers(text);
+    console.log("Processed text for handleUserInput:", processedText);
+
+    handleUserInput(processedText, `whatsapp:+${cleanNum}`);
+    }
+
+    res.status(200).send('OK');
+});
+
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
   makeTwilioRequest();
-  initializeReminders();
+  // initializeReminders();
 });
