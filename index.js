@@ -647,7 +647,7 @@ const normalizedDeadline = `${datePart} ${hour}:${minute}`;
       };
 
       // Call the /update-reminder endpoint
-      const response = await fetch("http://localhost:8000/update-reminder", {
+      const response = await fetch("https://reminder-test-new-production.up.railway.app/update-reminder", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1100,7 +1100,7 @@ Thank you for providing the task details! Here's a quick summary:
                 session.conversationHistory = [];
 
                 await fetch(
-                  "http://localhost:8000/update-reminder",
+                  "https://reminder-test-new-production.up.railway.app/update-reminder",
                   {
                     method: "POST",
                     headers: {
@@ -4193,44 +4193,44 @@ async function getAllEmployerPhones() {
   return Object.values(employerMap);
 }
 
-// cron.schedule("0 */5 * * *", async () => {
-//   console.log("⏰ Running scheduled job...");
+cron.schedule("0 */3 * * *", async () => {
+  console.log("⏰ Running scheduled job...");
 
-//   try {
-//     const employerList = await getAllEmployerPhones();
+  try {
+    const employerList = await getAllEmployerPhones();
 
-//     for (const employer of employerList) {
+    for (const employer of employerList) {
 
-//              if (employer.phone !== "918013356481" && employer.phone !== "917980018498"
-//                 && employer.phone !== "14155839275"
-//              ) {
-//   continue;
-// }
+             if (employer.phone !== "918013356481" && employer.phone !== "917980018498"
+                && employer.phone !== "14155839275"
+             ) {
+  continue;
+}
 
-//   const pendingTasks = employer.tasks;
-//   let taskList = "";
+  const pendingTasks = employer.tasks;
+  let taskList = "";
 
-//   if (pendingTasks.length > 0) {
-//     taskList = pendingTasks
-//       .map((task, index) => `${index + 1}. ${task.task_details || "Untitled Task"}`)
-//       .join("\n");
-//   }
+  if (pendingTasks.length > 0) {
+    taskList = pendingTasks
+      .map((task, index) => `${index + 1}. ${task.task_details || "Untitled Task"}`)
+      .join("\n");
+  }
 
-//   console.log(`📩 Sending to: ${employer.phone}`);
+  console.log(`📩 Sending to: ${employer.phone}`);
 
-//   await client.messages.create({
-//   from: "whatsapp:+14155238886", // your Twilio WhatsApp sender number
-//   to: `whatsapp:+${employer.phone}`,
-//   body: `Hey, you have ${pendingTasks.length} pending tasks today:\n${taskList || "No tasks pending ✅"}`
-// });
+  await client.messages.create({
+  from: "whatsapp:+14155238886", // your Twilio WhatsApp sender number
+  to: `whatsapp:+${employer.phone}`,
+  body: `Hey, you have ${pendingTasks.length} pending tasks today:\n${taskList || "No tasks pending ✅"}`
+});
 
-// }
-//   } catch (err) {
-//     console.error("❌ Error fetching employer list:", err.message);
-//   }
-// }, {
-//   timezone: "Asia/Kolkata",
-// });
+}
+  } catch (err) {
+    console.error("❌ Error fetching employer list:", err.message);
+  }
+}, {
+  timezone: "Asia/Kolkata",
+});
 
 app.get("/show-task-summary", async (req, res) => {
   try {
@@ -4336,5 +4336,5 @@ let number = message.data.author
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
   makeTwilioRequest();
-  // initializeReminders();
+  initializeReminders();
 });
