@@ -2717,7 +2717,7 @@ When all details are collected, return **ONLY** a JSON object with the following
 
       // Generate reply with full context
       const completion = await openai.chat.completions.create({
-        model: "gpt-4",
+        model: "gpt-4.1",
         messages: sessions[userNumber].history,
         functions: [
           {
@@ -4217,7 +4217,7 @@ async function getAllEmployerPhones() {
 }
 
 cron.schedule(
-  "*/5 * * * *",
+  "0 */3 * * *",
   async () => {
     console.log("⏰ Running scheduled job...");
 
