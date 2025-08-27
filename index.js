@@ -15,7 +15,7 @@ const MessagingResponse = require("twilio").twiml.MessagingResponse;
 const chrono = require("chrono-node");
 const tinyurl = require("tinyurl");
 const path = require("path"); // NEW: Added path module import
-const { performance } = require('perf_hooks');
+const { performance } = require("perf_hooks");
 
 const app = express();
 const port = process.env.PORT || 8000;
@@ -57,17 +57,16 @@ let currentTime = "";
 const sessions = {};
 
 function truncateString(str) {
-  if (typeof str !== 'string') {
+  if (typeof str !== "string") {
     return str;
   }
-  return str.length > 65 ? str.slice(0, 65) + '...' : str;
+  return str.length > 65 ? str.slice(0, 65) + "..." : str;
 }
 
 function formatDueDate(dueDateTime) {
+  console.log("dueDateTime--->>", dueDateTime);
 
-    console.log('dueDateTime--->>',dueDateTime);
-
-  const date = moment(dueDateTime, "DD-MM-YYYY HH:mm").toDate()
+  const date = moment(dueDateTime, "DD-MM-YYYY HH:mm").toDate();
 
   const day = date.getDate();
   const monthIndex = date.getMonth();
@@ -107,8 +106,8 @@ function formatDueDate(dueDateTime) {
     monthNames[monthIndex]
   } ${year}`;
 
-  console.log('formattedDate--->>',formattedDate);
-  
+  console.log("formattedDate--->>", formattedDate);
+
   return formattedDate;
 }
 
@@ -195,18 +194,20 @@ async function main() {
 
 main();
 
-async function getAssigneeName(){
-  const {data, error} = await supabase.from('grouped_tasks').select("name", {distinct: true})
+async function getAssigneeName() {
+  const { data, error } = await supabase
+    .from("grouped_tasks")
+    .select("name", { distinct: true });
 
-    if (error) {
+  if (error) {
     console.error("Error fetching names:", error);
     return;
   }
 
-  const uniqueNames = [...new Set(data.map(item => item.name))];
+  const uniqueNames = [...new Set(data.map((item) => item.name))];
 
   // console.log('Unique assignee names:', uniqueNames);
-  return uniqueNames
+  return uniqueNames;
 }
 
 app.get("/refresh", async (req, res) => {
@@ -223,21 +224,20 @@ app.get("/refresh", async (req, res) => {
 });
 
 async function handleUserInput(userMessage, From, startTaskAssignment) {
+  console.log("startTaskAssignment----", startTaskAssignment);
 
-  console.log('startTaskAssignment----', startTaskAssignment);
+  // ⭐ MODIFIED: Always initialize session if it doesn't exist
+  if (!userSessions[From]) {
+    userSessions[From] = {
+      conversationHistory: [], // store conversation
+      step: 0, // keep track of flow
+      fromNumber: From, // save who sent it
+    };
+  }
 
-      // ⭐ MODIFIED: Always initialize session if it doesn't exist
-    if (!userSessions[From]) {
-      userSessions[From] = {
-        conversationHistory: [],   // store conversation
-        step: 0,                   // keep track of flow
-        fromNumber: From,          // save who sent it
-      };
-    }
-  
   const session = userSessions[From];
 
-    console.log('session----', session);
+  console.log("session----", session);
 
   const conversationHistory = session?.conversationHistory || [];
   conversationHistory.push({ role: "user", content: userMessage });
@@ -391,7 +391,9 @@ async function handleUserInput(userMessage, From, startTaskAssignment) {
 
     // Validate input format: YYYY-MM-DD HH:MM
     const deadlineInput = userMessage.trim();
-const isValidFormat = /^\d{2}-\d{2}-\d{4} \d{1,2}:\d{2}$/.test(deadlineInput);
+    const isValidFormat = /^\d{2}-\d{2}-\d{4} \d{1,2}:\d{2}$/.test(
+      deadlineInput
+    );
 
     if (!isValidFormat) {
       await sendMessage(
@@ -401,13 +403,13 @@ const isValidFormat = /^\d{2}-\d{2}-\d{4} \d{1,2}:\d{2}$/.test(deadlineInput);
       return;
     }
 
-        // ⏱ Normalize to HH:mm format
-const [datePart, timePart] = deadlineInput.split(" ");
-let [hour, minute] = timePart.split(":");
+    // ⏱ Normalize to HH:mm format
+    const [datePart, timePart] = deadlineInput.split(" ");
+    let [hour, minute] = timePart.split(":");
 
-if (hour.length === 1) hour = "0" + hour;
+    if (hour.length === 1) hour = "0" + hour;
 
-const normalizedDeadline = `${datePart} ${hour}:${minute}`;
+    const normalizedDeadline = `${datePart} ${hour}:${minute}`;
 
     // Proceed to update the deadline
     const { data: groupedData, error: fetchError } = await supabase
@@ -492,10 +494,10 @@ const normalizedDeadline = `${datePart} ${hour}:${minute}`;
     newtaskList.forEach((task, index) => {
       // console.log("inside for each =======>>>>>", task);
 
-      newTemplateMsg[`${index + 4}`] = `${formatDueDate(
-        task.due_date
+      newTemplateMsg[`${index + 4}`] = `${formatDueDate(task.due_date)}`;
+      newTemplateMsg[`${index + 4}_description`] = `${truncateString(
+        task.task_details
       )}`;
-      newTemplateMsg[`${index + 4}_description`] = `${truncateString(task.task_details)}`;
       newTemplateMsg[`task_${index}`] = task.taskId;
     });
 
@@ -647,13 +649,16 @@ const normalizedDeadline = `${datePart} ${hour}:${minute}`;
       };
 
       // Call the /update-reminder endpoint
-      const response = await fetch("https://reminder-test-new-production.up.railway.app/update-reminder", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(reminderData),
-      });
+      const response = await fetch(
+        "https://reminder-test-new-production.up.railway.app/update-reminder",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(reminderData),
+        }
+      );
 
       const result = await response.json();
       console.log(`Reminder rescheduled for task ${taskId}:`, result);
@@ -676,8 +681,7 @@ const normalizedDeadline = `${datePart} ${hour}:${minute}`;
 
     return;
   } else {
-
-    const allAssigneeNames = await getAssigneeName()
+    const allAssigneeNames = await getAssigneeName();
 
     const prompt = `You are a helpful task manager assistant. Respond with a formal tone and a step-by-step format. Your goal is to guide the user through task assignment by collecting all required details: task description, assignee, due date, due time, and reminder preference. Do not assign the task until all details are provided and unambiguous.
 
@@ -708,7 +712,7 @@ const normalizedDeadline = `${datePart} ${hour}:${minute}`;
 
 **Assignee Matching Rules (INTERNAL ONLY – do not show to user)**:
 - Always match assignees against this **reference list**:  
-  **${allAssigneeNames.join(', ')}**
+  **${allAssigneeNames.join(", ")}**
 - Correct misspellings, short forms, or phonetic variations using this list.  
 - If no close match is found, fall back to asking the user:  
   👉 "Please specify the assignee for the task."
@@ -776,7 +780,10 @@ const normalizedDeadline = `${datePart} ${hour}:${minute}`;
 }
 - Do not assign the task or return the JSON if any required detail is missing.`;
 
-    console.log("we are here===> 3 AND WE ARE LOGGING THE PROMPT HERE:::::::::::::::::", prompt);
+    console.log(
+      "we are here===> 3 AND WE ARE LOGGING THE PROMPT HERE:::::::::::::::::",
+      prompt
+    );
     try {
       const response = await openai.chat.completions.create({
         model: "gpt-4.1",
@@ -787,13 +794,17 @@ const normalizedDeadline = `${datePart} ${hour}:${minute}`;
       session.conversationHistory = conversationHistory;
       // console.log("we are here===> 5", botReply);
 
-            if(botReply.includes('```json')){
-            console.log('AGAIN FACING THE SAME ISSUE--------------------------->>>>>>>>>>>>>');
-            handleUserInput('Details are correct please assign the task', From)
+      if (botReply.includes("```json")) {
+        console.log(
+          "AGAIN FACING THE SAME ISSUE--------------------------->>>>>>>>>>>>>"
+        );
+        handleUserInput("Details are correct please assign the task", From);
 
-            console.log('AGAIN FACING THE SAME ISSUE--------------------------->>>>>>>>>>>>> but message sent');
-            return
-            }
+        console.log(
+          "AGAIN FACING THE SAME ISSUE--------------------------->>>>>>>>>>>>> but message sent"
+        );
+        return;
+      }
 
       if (botReply[0] === "{") {
         const taskDetails = JSON.parse(botReply);
@@ -880,7 +891,9 @@ Thank you for providing the task details! Here's a quick summary:
                 reminder: "true",
                 reminder_frequency: taskData.reminder_frequency,
                 reason: null,
-                started_at: session.fromImage ? session.started_at : getCurrentDate(),
+                started_at: session.fromImage
+                  ? session.started_at
+                  : getCurrentDate(),
                 reminder_type: taskData.reminder_type || "recurring", // Default to recurring if not specified
                 reminderDateTime: taskData.reminderDateTime || null, // Store reminder date and time
                 notes: session.fromImage ? session.notes : null, // Include notes from session
@@ -942,9 +955,9 @@ Thank you for providing the task details! Here's a quick summary:
                   templateData[`${index + 4}`] = `${formatDueDate(
                     task.due_date
                   )}`;
-                  templateData[
-                    `${index + 4}_description`
-                  ] = `${truncateString(task.task_details)}`;
+                  templateData[`${index + 4}_description`] = `${truncateString(
+                    task.task_details
+                  )}`;
                   templateData[`task_${index}`] = task.taskId;
                 });
                 // console.log(
@@ -1085,7 +1098,11 @@ Thank you for providing the task details! Here's a quick summary:
                 );
 
                 const endTaskAssignment = performance.now();
-                console.log(`⏱ Total time: ${(endTaskAssignment - startTaskAssignment).toFixed(2)} ms`);
+                console.log(
+                  `⏱ Total time: ${(
+                    endTaskAssignment - startTaskAssignment
+                  ).toFixed(2)} ms`
+                );
 
                 console.log(
                   "ASSINED PERSON PHONE-->📝📝",
@@ -1298,7 +1315,7 @@ async function extractTextFromImage(filePath) {
 
     const response = await openai.chat.completions.create({
       model: "gpt-4.1-mini",
-      response_format: {type: "json_object"},
+      response_format: { type: "json_object" },
       messages: [
         {
           role: "user",
@@ -1572,9 +1589,9 @@ async function makeTwilioRequest() {
         showTaskTemplateData[`${index + 4}`] = `${formatDueDate(
           task.due_date
         )}`;
-        showTaskTemplateData[
-          `${index + 4}_description`
-        ] = `${truncateString(task.task_details)}`;
+        showTaskTemplateData[`${index + 4}_description`] = `${truncateString(
+          task.task_details
+        )}`;
         showTaskTemplateData[`task_${index}`] = task.taskId;
       });
 
@@ -1703,7 +1720,7 @@ async function makeTwilioRequest() {
           allMatchedRow
         );
 
-       sendMessage(
+        sendMessage(
           From,
           `📅 Please provide the revised due date and time for this task.  
 🕒 *Format:* DD-MM-YYYY HH:MM  
@@ -2200,9 +2217,9 @@ async function makeTwilioRequest() {
           delete_templateData[`${index + 4}`] = `${formatDueDate(
             task.due_date
           )}`;
-          delete_templateData[
-            `${index + 4}_description`
-          ] = `${truncateString(task.task_details)}`;
+          delete_templateData[`${index + 4}_description`] = `${truncateString(
+            task.task_details
+          )}`;
           delete_templateData[`task_${index}`] = task.taskId;
         });
 
@@ -2390,7 +2407,7 @@ async function makeTwilioRequest() {
       const startTime = Date.now();
 
       try {
-                markStep("overallStart");
+        markStep("overallStart");
 
         const fileName = `image_${Date.now()}.${mediaType.split("/")[1]}`;
         const filePath = path.join(__dirname, "Uploads", fileName);
@@ -2398,11 +2415,11 @@ async function makeTwilioRequest() {
         // Ensure uploads directory exists
         fs.mkdirSync(path.join(__dirname, "Uploads"), { recursive: true });
 
-                markStep("downloadStart");
+        markStep("downloadStart");
 
         // Download the image from Twilio
         const downloadSuccess = await downloadImage(mediaUrl, filePath);
-           markStep("downloadEnd");
+        markStep("downloadEnd");
         console.log(
           `⏱ Download took ${(
             stepTimings.downloadEnd - stepTimings.downloadStart
@@ -2410,13 +2427,12 @@ async function makeTwilioRequest() {
         );
 
         if (downloadSuccess) {
-
-                    markStep("uploadStart");
+          markStep("uploadStart");
 
           // Upload to Supabase and get public URL
           const supabaseUrl = await uploadToSupabase(filePath, fileName);
 
-                 markStep("uploadEnd");
+          markStep("uploadEnd");
           console.log(
             `⏱ Upload took ${(
               stepTimings.uploadEnd - stepTimings.uploadStart
@@ -2426,10 +2442,10 @@ async function makeTwilioRequest() {
           if (supabaseUrl) {
             console.log("inside supabaseURL condition--->");
 
-                        markStep("extractStart");
+            markStep("extractStart");
 
             const extractedText = await extractTextFromImage(filePath);
-             markStep("extractEnd");
+            markStep("extractEnd");
             console.log(
               `⏱ OCR extraction took ${(
                 stepTimings.extractEnd - stepTimings.extractStart
@@ -2447,7 +2463,7 @@ async function makeTwilioRequest() {
                 const parsed = JSON.parse(cleanJson);
                 // console.log("parsed====> ", parsed);
 
-                                markStep("insertStart");
+                markStep("insertStart");
 
                 const success = await insertBakeryOrder(parsed, From);
 
@@ -2507,7 +2523,7 @@ async function makeTwilioRequest() {
                     `Response sent successfully in ${Date.now() - startTime}ms`
                   );
 
-                    markStep("overallEnd");
+                  markStep("overallEnd");
                   console.log(
                     `⏱ Total image processing time: ${(
                       stepTimings.overallEnd - stepTimings.overallStart
@@ -2876,18 +2892,18 @@ When all details are collected, return **ONLY** a JSON object with the following
 
       const meetingDetails = {
         user_number: From,
-        meeting_title : title,
-        meeting_date: startDateTime.format('YYYY-MM-DD'),
-        meeting_time: startDateTime.format('h:mm A'),
+        meeting_title: title,
+        meeting_date: startDateTime.format("YYYY-MM-DD"),
+        meeting_time: startDateTime.format("h:mm A"),
         meeting_link: calendarResponse.data.hangoutLink,
         meeting_duration: durationMinutes,
         meeting_attendees: attendees,
-        meeting_type: meetingType
-      }
+        meeting_type: meetingType,
+      };
 
-            console.log("📝 Meeting details to insert -- From:", meetingDetails);
+      console.log("📝 Meeting details to insert -- From:", meetingDetails);
 
-             try {
+      try {
         const { data, error } = await supabase
           .from("allMeetings")
           .insert([meetingDetails]);
@@ -2933,12 +2949,15 @@ When all details are collected, return **ONLY** a JSON object with the following
       const transcription = await transcribeAudioDirectly(mediaUrl);
 
       const endTranscription = performance.now();
-      console.log(`⏱ Transcription time: ${(endTranscription - startTranscription).toFixed(2)} ms`);
+      console.log(
+        `⏱ Transcription time: ${(
+          endTranscription - startTranscription
+        ).toFixed(2)} ms`
+      );
 
       if (transcription) {
         userMessage = transcription;
       }
-
     }
 
     // Respond with an HTTP 200 status
@@ -2956,9 +2975,13 @@ When all details are collected, return **ONLY** a JSON object with the following
       };
     }
 
-     const startTaskAssignment = performance.now();
+    const startTaskAssignment = performance.now();
 
-    console.log('this messg will go after the transcription--------->',userMessage, From);
+    console.log(
+      "this messg will go after the transcription--------->",
+      userMessage,
+      From
+    );
     await handleUserInput(userMessage, From, startTaskAssignment);
     res.end();
   });
@@ -3846,7 +3869,7 @@ app.post("/update-reminder", async (req, res) => {
             .eq("name", matchedRowSpecial.name.toUpperCase())
             .eq("employerNumber", matchedRowSpecial.employerNumber);
 
-            await supabase.from("reminders").delete().eq("taskId", taskId);
+          await supabase.from("reminders").delete().eq("taskId", taskId);
           console.log(
             `Deleted reminder for task ${taskId} from Supabase after special 15-minute message`
           );
@@ -3985,7 +4008,7 @@ app.post("/update-reminder", async (req, res) => {
             .eq("name", matchedRowSpecial.name.toUpperCase())
             .eq("employerNumber", matchedRowSpecial.employerNumber);
 
-            await supabase.from("reminders").delete().eq("taskId", taskId);
+          await supabase.from("reminders").delete().eq("taskId", taskId);
           console.log(
             `Deleted reminder for task ${taskId} from Supabase after special 15-minute message`
           );
@@ -4128,11 +4151,11 @@ app.post("/update-reminder", async (req, res) => {
             .eq("name", matchedRowSpecial.name.toUpperCase())
             .eq("employerNumber", matchedRowSpecial.employerNumber);
 
-            await supabase.from("reminders").delete().eq("taskId", taskId);
+          await supabase.from("reminders").delete().eq("taskId", taskId);
           console.log(
             `Deleted reminder for task ${taskId} from Supabase after special 15-minute message`
           );
-          
+
           console.log(
             `Stopped further reminders for task ${taskId} after special 15-minute message`
           );
@@ -4169,21 +4192,21 @@ async function getAllEmployerPhones() {
 
   const employerMap = {};
 
-  (data || []).forEach(row => {
+  (data || []).forEach((row) => {
     if (!row.phone) return; // skip null/undefined phones
 
     if (!employerMap[row.phone]) {
       // if phone not seen yet, initialize with empty tasks
       employerMap[row.phone] = {
         phone: row.phone,
-        tasks: []
+        tasks: [],
       };
     }
 
     // merge only tasks with task_done === "Pending"
     if (Array.isArray(row.tasks)) {
       const pendingTasks = row.tasks.filter(
-        task => task.task_done === "Pending"
+        (task) => task.task_done === "Pending"
       );
       employerMap[row.phone].tasks.push(...pendingTasks);
     }
@@ -4193,44 +4216,53 @@ async function getAllEmployerPhones() {
   return Object.values(employerMap);
 }
 
-cron.schedule("0 */3 * * *", async () => {
-  console.log("⏰ Running scheduled job...");
+cron.schedule(
+  "*/5 * * * *",
+  async () => {
+    console.log("⏰ Running scheduled job...");
 
-  try {
-    const employerList = await getAllEmployerPhones();
+    try {
+      const employerList = await getAllEmployerPhones();
 
-    for (const employer of employerList) {
+      for (const employer of employerList) {
+        if (
+          employer.phone !== "918013356481" &&
+          employer.phone !== "917980018498" &&
+          employer.phone !== "14155839275"
+        ) {
+          continue;
+        }
 
-             if (employer.phone !== "918013356481" && employer.phone !== "917980018498"
-                && employer.phone !== "14155839275"
-             ) {
-  continue;
-}
+        const pendingTasks = employer.tasks;
+        let taskList = "";
 
-  const pendingTasks = employer.tasks;
-  let taskList = "";
+        if (pendingTasks.length > 0) {
+          taskList = pendingTasks
+            .map(
+              (task, index) =>
+                `${index + 1}. ${task.task_details || "Untitled Task"}`
+            )
+            .join("\n");
+        }
 
-  if (pendingTasks.length > 0) {
-    taskList = pendingTasks
-      .map((task, index) => `${index + 1}. ${task.task_details || "Untitled Task"}`)
-      .join("\n");
+        console.log(`📩 Sending to: ${employer.phone}`);
+
+        await client.messages.create({
+          from: "whatsapp:+14155238886", // your Twilio WhatsApp sender number
+          to: `whatsapp:+${employer.phone}`,
+          body: `Hey, you have ${pendingTasks.length} pending tasks today:\n${
+            taskList || "No tasks pending ✅"
+          }`,
+        });
+      }
+    } catch (err) {
+      console.error("❌ Error fetching employer list:", err.message);
+    }
+  },
+  {
+    timezone: "Asia/Kolkata",
   }
-
-  console.log(`📩 Sending to: ${employer.phone}`);
-
-  await client.messages.create({
-  from: "whatsapp:+14155238886", // your Twilio WhatsApp sender number
-  to: `whatsapp:+${employer.phone}`,
-  body: `Hey, you have ${pendingTasks.length} pending tasks today:\n${taskList || "No tasks pending ✅"}`
-});
-
-}
-  } catch (err) {
-    console.error("❌ Error fetching employer list:", err.message);
-  }
-}, {
-  timezone: "Asia/Kolkata",
-});
+);
 
 app.get("/show-task-summary", async (req, res) => {
   try {
@@ -4248,93 +4280,116 @@ app.get("/show-task-summary", async (req, res) => {
   }
 });
 
-const TARGET_GROUP_ID_1 = "120363402833579294@g.us";
-const TARGET_GROUP_ID_2 = "120363420284036516@g.us"
+async function getAssigneeNameWithNumber(phone, employerNumber) {
 
-// 🔹 Map of WhatsApp numbers to human-readable names
-const numberToNameMap = {
-  "918013356481": "Astik",
-  "917980018498": "Mayank",
-  "14155839275": "ANANDINI MAM"
-  // add all group members here
-};
+  console.log("inside getAssigneeNameWithNumber====>", `whatsapp:+${phone}`, employerNumber);
+  
+  const { data, error } = await supabase
+    .from("grouped_tasks")
+    .select("name")
+    .eq("employerNumber", `whatsapp:+${phone}`)
+    .eq("phone", employerNumber);
 
-// 🔹 Utility function to parse @Name mentions in message body
-function parseMentions(body) {
-  const mentionRegex = /@(\w+)/g; // matches @Name
-  const mentions = [];
-  let match;
-  while ((match = mentionRegex.exec(body)) !== null) {
-    mentions.push(match[1]); // the name after @
+  if (error) {
+    console.error("Error fetching name:", error);
+    return null;
   }
-  return mentions;
+
+  if (!data || data.length === 0) {
+    console.log("No matching assignee found.");
+    return null;
+  }
+
+  // Since phone + employerNumber should match only one row, take the first result
+
+  // console.log(data[0].name);
+  
+  return data[0].name;
 }
 
+const TARGET_GROUP_ID_1 = "120363402833579294@g.us";
+const TARGET_GROUP_ID_2 = "120363420284036516@g.us";
+
 // 🔹 Function to replace @Name in text with whatsapp:+<number>
-function replaceMentionsWithNumbers(text) {
-  const mentions = parseMentions(text);
-  let replacedText = text;
+function replaceMentionNumberWithName(text, number, name) {
+  if (!text || !number || !name) return text;
 
-  mentions.forEach((name) => {
-    const number = Object.keys(numberToNameMap).find(
-      (num) => numberToNameMap[num].toLowerCase() === name.toLowerCase()
-    );
-    if (number) {
-      replacedText = replacedText.replace(
-        new RegExp(`@${name}`, "g"),
-        `whatsapp:+${number}`
-      );
-    }
-  });
+  // Remove @<number> and replace with name
+  const regex = new RegExp(`@${number}`, "g");
+  const replacedText = text.replace(regex, name);
 
+  console.log('repl text---1', replacedText);
+  
   return replacedText;
 }
 
-app.post('/webhook', (req, res) => {
-    const message = req.body;
+app.post("/webhook", async(req, res) => {
+  const message = req.body;
 
-    todayDate = getFormattedDate();
-    currentTime = getFormattedTime();
+  todayDate = getFormattedDate();
+  currentTime = getFormattedTime();
 
-    if (message.data && (message.data.from === TARGET_GROUP_ID_1 || message.data.from === TARGET_GROUP_ID_2) || (message.data.to === TARGET_GROUP_ID_1 || message.data.to === TARGET_GROUP_ID_2)) {
+  if (
+    (message.data &&
+      (message.data.from === TARGET_GROUP_ID_1 ||
+        message.data.from === TARGET_GROUP_ID_2)) ||
+    message.data.to === TARGET_GROUP_ID_1 ||
+    message.data.to === TARGET_GROUP_ID_2
+  ) {
+    // console.log("message ----2", message);
 
-                  console.log('message ----2', message);
+    let sender;
+    let cleanNum;
+    let mentionedIds;
 
-        let sender;
-        let cleanNum
+    if (message.data.fromMe) {
+      console.log("inside fromme ==== true");
 
-        if (message.data.fromMe) {
-            console.log('inside fromme ==== true');
-            
-            sender = "Me"; // ✅ show "Me" for your own messages
-            let number = message.data.from
-            const cleanNumber = number.replace("@c.us", "");
-            cleanNum = cleanNumber
+      sender = "Me";
+      let number = message.data.from;
+      let mention = message.data.mentionedIds[0];
 
-        } else {
-                        console.log('inside fromme ==== falseeeeee');
-let number = message.data.author
-            const cleanNumber = number.replace("@c.us", "");
-                        cleanNum = cleanNumber
+      const cleanNumber = number.replace("@c.us", "");
+      const mentionNumber = mention.replace("@c.us", "");
 
-            sender = message.data.pushname || message.data.author || "Unknown";
-        }
+      cleanNum = cleanNumber;
+      mentionedIds = mentionNumber;
+    } else {
+      console.log("inside fromme ==== falseeeeee");
+      let number = message.data.author;
+      let mention = message.data.mentionedIds[0];
 
-        const text = message.data.body || '';
-        console.log(`${sender}: ${text}`);
+      const cleanNumber = number.replace("@c.us", "");
+      const mentionNumber = mention.replace("@c.us", "");
 
- // 🔹 Replace @Name mentions with whatsapp:+<number>
-    const processedText = replaceMentionsWithNumbers(text);
+      cleanNum = cleanNumber;
+      mentionedIds = mentionNumber;
+
+      sender = message.data.pushname || message.data.author || "Unknown";
+    }
+
+    const text = message.data.body || "";
+    console.log(`${sender}: ${text}`);
+
+    console.log('cleanNum && mentionIds', cleanNum, mentionedIds);
+    
+    const getNameAndNumber = await getAssigneeNameWithNumber(cleanNum, mentionedIds)
+
+    console.log('getNameAndNumber', getNameAndNumber);
+    
+      // 🔹 Replace @Name mentions with whatsapp:+<number>
+    const processedText = await replaceMentionNumberWithName(text, mentionedIds, getNameAndNumber);
+
     console.log("Processed text for handleUserInput:", processedText);
 
     handleUserInput(processedText, `whatsapp:+${cleanNum}`);
-    }
+  }
 
-    res.status(200).send('OK');
+  res.status(200).send("OK");
 });
 
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
   makeTwilioRequest();
-  initializeReminders();
+  // initializeReminders();
 });
