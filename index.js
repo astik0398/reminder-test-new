@@ -683,7 +683,9 @@ async function handleUserInput(userMessage, From, startTaskAssignment) {
   } else {
     const allAssigneeNames = await getAssigneeName();
 
-    const prompt = `You are a helpful task manager assistant. Respond with a formal tone and a step-by-step format. Your goal is to guide the user through task assignment by collecting all required details: task description, assignee, due date, due time, and reminder preference. Do not assign the task until all details are provided and unambiguous.
+   const prompt = `You are a helpful task manager assistant. Respond with a formal tone and a step-by-step format. Your goal is to guide the user through task assignment by collecting all required details: task description, assignee, due date, due time, and reminder preference. Do not assign the task until all details are provided and unambiguous.
+
+**CRITICAL OUTPUT REQUIREMENT: When returning task assignment JSON, return ONLY pure JSON without any markdown formatting, code blocks, backticks, or additional text. Do not wrap the JSON in \`\`\`json blocks. Start directly with { and end with }.**
 
 **Task Assignment Rules**:
 - Required details: task description, assignee, due date (DD-MM-YYYY), due time (HH:mm), and reminder preference.
@@ -704,8 +706,19 @@ async function handleUserInput(userMessage, From, startTaskAssignment) {
 - Ensure the corrected task is a complete, professional, and grammatically correct sentence.
 - Example: If the user provides "snd remnder everydy for aprovl", correct it to "Send reminder every day for approval".
 
-**Assignee Detection**:
-- Interpret the assignee from phrases like "tell [name] to [task]", "ask [name] to [task]", or explicit mentions like "assignee is [name]".
+**Assignee Detection (Enhanced Patterns)**:
+- Interpret the assignee from these phrases and patterns:
+  - "assign to [name]" → extract [name] as assignee
+  - "assigned to [name]" → extract [name] as assignee  
+  - "assignee is [name]" → extract [name] as assignee
+  - "give this to [name]" → extract [name] as assignee
+  - "send to [name]" → extract [name] as assignee
+  - "tell [name] to [task]" → extract [name] as assignee
+  - "ask [name] to [task]" → extract [name] as assignee
+  - "[name] should do this" → extract [name] as assignee
+  - "[name] needs to [task]" → extract [name] as assignee
+  - "for [name]" → extract [name] as assignee
+  - "[task] by [name]" → extract [name] as assignee
 - The assignee must be a proper name (e.g., "Astik", "John Doe", "Anandini").
 - Do not assume non-name terms (e.g., "this", "assigning") as the assignee.
 - If the assignee is missing or ambiguous, prompt: "Please specify the assignee for the task."
@@ -721,13 +734,26 @@ async function handleUserInput(userMessage, From, startTaskAssignment) {
 - Do not invent new names.
 - Always consider the exact spelling from the above "Assignee list".
 
+**Reminder Detection (Enhanced Patterns)**:
+- Detect reminder frequency from these patterns:
+  - "every X hrs/hours" → recurring reminder with frequency "every X hours"
+  - "every X mins/minutes" → recurring reminder with frequency "every X minutes"
+  - "recurring reminder every X" → recurring reminder
+  - "reminder every X" → recurring reminder
+  - "send reminder every X" → recurring reminder
+  - "recurring X" → recurring reminder with frequency X
+  - "every X" → recurring reminder with frequency "every X"
+  - "X hour reminder" → recurring reminder with frequency "every X hours"
+  - "remind every X" → recurring reminder
+  - "X hourly" → recurring reminder with frequency "every X hours"
+
 **Due Date Handling**:
 - If the user provides a day and month (e.g., "28th Feb" or "28 February"), assume the current year (2025) and format as "DD-MM-YYYY" (e.g., "28-02-2025").
 - If the user provides a full date (e.g., "28th Feb 2025"), return it as is in "DD-MM-YYYY" format.
 - For dynamic terms:
   - Current date is ${todayDate}
   - "today": Use the current date which is ${todayDate} (e.g., if today is April 5, 2025, it should return "05-04-2025").
-  - "tomorrow": Use the next day’s date (e.g., "31-07-2025") (e.g., if today is April 5, 2025, "tomorrow" should be "06-04-2025").
+  - "tomorrow": Use the next day's date (e.g., "31-07-2025") (e.g., if today is April 5, 2025, "tomorrow" should be "06-04-2025").
   - "next week": Use the same day in the following week (e.g., if today is April 5, 2025, "next week" would be April 12, 2025).
   - "in X days": Calculate the date accordingly (e.g., "in 3 days" from 30-07-2025 is "02-08-2025").
   - "next month": Use the same day in the next month (e.g., if today is April 5, 2025, "next month" should become "05-05-2025").
@@ -764,11 +790,16 @@ async function handleUserInput(userMessage, From, startTaskAssignment) {
 - Check the full conversation history for missing details before prompting the user.
 - Do not ask for a detail if it is already clearly provided in earlier messages.
 
+**Context Preservation for Image-Based Tasks**:
+- If this conversation started from an image extraction (check conversation history for image-related context), prioritize preserving and using the extracted task details, dates, and assignee information.
+- When user provides assignee and reminder information for an image-extracted task, combine it with the existing task details rather than asking for basic information again.
+
 **Task Assignment**:
 - Once all required details (task, assignee, due date, due time, reminder type, and reminder frequency or date/time) are collected, return **only** a JSON object for backend processing.
 - Do not include any extra text before or after the JSON.
 - Do not send a summary or ask for confirmation before returning the JSON.
-- The JSON format must be:
+- Do not wrap the JSON in code blocks or markdown formatting.
+- The JSON format must be exactly:
 {
   "task": "<task_name>",
   "assignee": "<assignee_name>",
@@ -778,12 +809,19 @@ async function handleUserInput(userMessage, From, startTaskAssignment) {
   "reminder_frequency": "<reminder_frequency or null for one-time>",
   "reminderDateTime": "<DD-MM-YYYY HH:mm or null for recurring>"
 }
-- Do not assign the task or return the JSON if any required detail is missing.`;
+- Do not assign the task or return the JSON if any required detail is missing.
 
-    console.log(
-      "we are here===> 3 AND WE ARE LOGGING THE PROMPT HERE:::::::::::::::::",
-      prompt
-    );
+**Example Successful Parsing Cases**:
+- "Assign to astik, recurring reminder every 5 hrs" → Should extract assignee: "astik", reminder_type: "recurring", reminder_frequency: "every 5 hrs"
+- "Give this to john, send reminder every 2 hours" → Should extract assignee: "john", reminder_type: "recurring", reminder_frequency: "every 2 hours"
+- "Tell sarah to do this task, recurring every 30 mins" → Should extract assignee: "sarah", reminder_type: "recurring", reminder_frequency: "every 30 mins"
+- "For mike, every 3 hours reminder" → Should extract assignee: "mike", reminder_type: "recurring", reminder_frequency: "every 3 hours"`;
+
+
+    // console.log(
+    //   "we are here===> 3 AND WE ARE LOGGING THE PROMPT HERE:::::::::::::::::",
+    //   prompt
+    // );
     try {
       const response = await openai.chat.completions.create({
         model: "gpt-4.1",
@@ -4323,19 +4361,89 @@ function replaceMentionNumberWithName(text, number, name) {
   return replacedText;
 }
 
+// app.post("/webhook", async(req, res) => {
+//   const message = req.body;
+
+//   todayDate = getFormattedDate();
+//   currentTime = getFormattedTime();
+
+//   if (
+//     (message.data &&
+//       (message.data.from === TARGET_GROUP_ID_1 ||
+//         message.data.from === TARGET_GROUP_ID_2)) ||
+//     message.data.to === TARGET_GROUP_ID_1 ||
+//     message.data.to === TARGET_GROUP_ID_2
+//   ) {
+//     // console.log("message ----2", message);
+
+//     let sender;
+//     let cleanNum;
+//     let mentionedIds;
+
+//     if (message.data.fromMe) {
+//       console.log("inside fromme ==== true");
+
+//       sender = "Me";
+//       let number = message.data.from;
+//       let mention = message.data.mentionedIds[0];
+
+//       const cleanNumber = number.replace("@c.us", "");
+//       const mentionNumber = mention.replace("@c.us", "");
+
+//       cleanNum = cleanNumber;
+//       mentionedIds = mentionNumber;
+//     } else {
+//       console.log("inside fromme ==== falseeeeee");
+//       let number = message.data.author;
+//       let mention = message.data.mentionedIds[0];
+
+//       const cleanNumber = number.replace("@c.us", "");
+//       const mentionNumber = mention.replace("@c.us", "");
+
+//       cleanNum = cleanNumber;
+//       mentionedIds = mentionNumber;
+
+//       sender = message.data.pushname || message.data.author || "Unknown";
+//     }
+
+//     const text = message.data.body || "";
+//     console.log(`${sender}: ${text}`);
+
+//     console.log('cleanNum && mentionIds', cleanNum, mentionedIds);
+    
+//     const getNameAndNumber = await getAssigneeNameWithNumber(cleanNum, mentionedIds)
+
+//     console.log('getNameAndNumber', getNameAndNumber);
+    
+//       // 🔹 Replace @Name mentions with whatsapp:+<number>
+//     const processedText = await replaceMentionNumberWithName(text, mentionedIds, getNameAndNumber);
+
+//     console.log("Processed text for handleUserInput:", processedText);
+
+//     handleUserInput(processedText, `whatsapp:+${cleanNum}`);
+//   }
+
+//   res.status(200).send("OK");
+// });
+
 app.post("/webhook", async(req, res) => {
-  const message = req.body;
+  try {
+    const message = req.body;
 
-  todayDate = getFormattedDate();
-  currentTime = getFormattedTime();
+    todayDate = getFormattedDate();
+    currentTime = getFormattedTime();
 
-  if (
-    (message.data &&
-      (message.data.from === TARGET_GROUP_ID_1 ||
-        message.data.from === TARGET_GROUP_ID_2)) ||
-    message.data.to === TARGET_GROUP_ID_1 ||
-    message.data.to === TARGET_GROUP_ID_2
-  ) {
+    // Early response if message doesn't match target groups
+    if (
+      !message.data ||
+      (message.data.from !== TARGET_GROUP_ID_1 &&
+       message.data.from !== TARGET_GROUP_ID_2 &&
+       message.data.to !== TARGET_GROUP_ID_1 &&
+       message.data.to !== TARGET_GROUP_ID_2)
+    ) {
+      return res.status(200).send("OK");
+    }
+
     // console.log("message ----2", message);
 
     let sender;
@@ -4347,7 +4455,12 @@ app.post("/webhook", async(req, res) => {
 
       sender = "Me";
       let number = message.data.from;
-      let mention = message.data.mentionedIds[0];
+      let mention = message.data.mentionedIds?.[0];
+
+      if (!number || !mention) {
+        console.log("Missing number or mention data for fromMe message");
+        return res.status(200).send("OK");
+      }
 
       const cleanNumber = number.replace("@c.us", "");
       const mentionNumber = mention.replace("@c.us", "");
@@ -4357,7 +4470,12 @@ app.post("/webhook", async(req, res) => {
     } else {
       console.log("inside fromme ==== falseeeeee");
       let number = message.data.author;
-      let mention = message.data.mentionedIds[0];
+      let mention = message.data.mentionedIds?.[0];
+
+      if (!number || !mention) {
+        console.log("Missing number or mention data for regular message");
+        return res.status(200).send("OK");
+      }
 
       const cleanNumber = number.replace("@c.us", "");
       const mentionNumber = mention.replace("@c.us", "");
@@ -4373,19 +4491,45 @@ app.post("/webhook", async(req, res) => {
 
     console.log('cleanNum && mentionIds', cleanNum, mentionedIds);
     
-    const getNameAndNumber = await getAssigneeNameWithNumber(cleanNum, mentionedIds)
+    // Add validation for required data
+    if (!cleanNum || !mentionedIds) {
+      console.log("Missing required data: cleanNum or mentionedIds");
+      return res.status(200).send("OK");
+    }
+
+    let getNameAndNumber;
+    try {
+      getNameAndNumber = await getAssigneeNameWithNumber(cleanNum, mentionedIds);
+    } catch (error) {
+      console.error("Error getting assignee name and number:", error);
+      return res.status(200).send("OK");
+    }
 
     console.log('getNameAndNumber', getNameAndNumber);
     
-      // 🔹 Replace @Name mentions with whatsapp:+<number>
+    // 🔹 Replace @Name mentions with whatsapp:+<number>
     const processedText = await replaceMentionNumberWithName(text, mentionedIds, getNameAndNumber);
 
     console.log("Processed text for handleUserInput:", processedText);
 
-    handleUserInput(processedText, `whatsapp:+${cleanNum}`);
-  }
+    // Handle the user input with proper error handling
+    try {
+      await handleUserInput(processedText, `whatsapp:+${cleanNum}`);
+    } catch (handleInputError) {
+      console.error("Error in handleUserInput from webhook:", handleInputError);
+      // Don't throw here, just log and continue
+    }
 
-  res.status(200).send("OK");
+    res.status(200).send("OK");
+
+  } catch (error) {
+    console.error("Error in /webhook endpoint:", error);
+    
+    // Always send a response, even on error
+    if (!res.headersSent) {
+      res.status(200).send("OK"); // Webhook endpoints should typically return 200 even on errors
+    }
+  }
 });
 
 app.listen(port, () => {
